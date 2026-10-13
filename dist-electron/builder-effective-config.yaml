@@ -1,0 +1,40 @@
+directories:
+  output: dist-electron
+  buildResources: build
+appId: com.belko.eduplatform
+productName: Belko Edu-Platform
+copyright: Copyright © 2026 Belko Edu-Platform
+files:
+  - filter:
+      - dist/main/**/*
+      - dist/preload/**/*
+      - dist/renderer/**/*
+      - src/assets/**/*
+      - public/**/*
+extraResources:
+  - from: src/assets/animations
+    to: animations
+    filter:
+      - '**/*'
+win:
+  target: nsis
+  icon: src/assets/icon.ico
+  artifactName: Belko-Edu-Platform-Setup-${version}.exe
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Belko Edu-Platform
+  uninstallDisplayName: Belko Edu-Platform
+  license: LICENSE.txt
+  include: build/nsis/installer.nsh
+mac:
+  target: dmg
+  icon: src/assets/icon.icns
+  artifactName: Belko-Edu-Platform-${version}.dmg
+linux:
+  target: AppImage
+  icon: src/assets/icon.png
+  artifactName: Belko-Edu-Platform-${version}.AppImage
+electronVersion: 44.7.0

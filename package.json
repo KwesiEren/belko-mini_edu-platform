@@ -1,0 +1,132 @@
+{
+  "name": "belko-edu-platform",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Belko Edu-Platform - Standalone offline school management system for African schools",
+  "author": "Belko Edu-Platform Team",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:8443 && cross-env NODE_ENV=development electron .\"",
+    "build:main": "vite build --config vite.main.config.ts",
+    "build:preload": "vite build --config vite.preload.config.ts",
+    "build:renderer": "vite build --config vite.config.ts --mode electron",
+    "build": "npm run build:main && npm run build:preload && npm run build:renderer && electron-builder",
+    "build:dir": "npm run build:main && npm run build:preload && npm run build:renderer && electron-builder --dir",
+    "preview": "vite preview",
+    "format": "oxfmt",
+    "lint": "oxfmt --check",
+    "db:migrate": "node -e \"require('./dist/main/index.js').runMigrations()\"",
+    "test:security": "node -e \"require('./dist/main/index.js').runSecurityTests()\"",
+    "test:csp": "node -e \"require('./dist/main/index.js').verifyCSP()\""
+  },
+  "main": "dist/main/index.js",
+  "dependencies": {
+    "@fontsource/montserrat": "^5.3.0",
+    "@types/dompurify": "^3.0.5",
+    "archiver": "^8.0.0",
+    "argon2": "^0.45.1",
+    "better-sqlite3": "^13.0.3",
+    "compression": "^1.8.2",
+    "cors": "^2.8.6",
+    "date-fns": "^4.4.0",
+    "dompurify": "^3.4.17",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "lottie-react": "^3.1.2",
+    "multer": "^2.4.0",
+    "pdf-lib": "^1.17.1",
+    "pino": "^10.4.0",
+    "pino-pretty": "^13.2.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sharp": "^0.35.5",
+    "socket.io": "^4.8.4",
+    "socket.io-client": "^4.8.4",
+    "unzipper": "^0.12.5",
+    "uuid": "^14.0.3",
+    "ws": "^8.22.0",
+    "xlsx": "^0.18.5",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/archiver": "^8.0.0",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/compression": "^1.8.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^22.20.5",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/unzipper": "^0.10.11",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.2",
+    "@vitejs/plugin-react": "^6.0.0",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "oxfmt": "^0.2.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^8.0.5",
+    "vite-plugin-electron": "^1.1.2",
+    "vite-plugin-electron-renderer": "^1.0.0",
+    "wait-on": "^9.5.1"
+  },
+  "build": {
+    "appId": "com.belko.eduplatform",
+    "productName": "Belko Edu-Platform",
+    "copyright": "Copyright © 2026 Belko Edu-Platform",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/main/**/*",
+      "dist/preload/**/*",
+      "dist/renderer/**/*",
+      "src/assets/**/*",
+      "public/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "src/assets/animations",
+        "to": "animations",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "src/assets/icon.ico",
+      "artifactName": "Belko-Edu-Platform-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Belko Edu-Platform",
+      "uninstallDisplayName": "Belko Edu-Platform",
+      "license": "LICENSE.txt",
+      "include": "build/nsis/installer.nsh"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "src/assets/icon.icns",
+      "artifactName": "Belko-Edu-Platform-${version}.dmg"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "src/assets/icon.png",
+      "artifactName": "Belko-Edu-Platform-${version}.AppImage"
+    }
+  }
+}

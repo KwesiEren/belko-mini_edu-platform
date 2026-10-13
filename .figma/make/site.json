@@ -1,0 +1,10 @@
+{
+  "description": "Designed for school staff, this offline education management platform streamlines student records, attendance, grades, and fees without recurring costs.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
