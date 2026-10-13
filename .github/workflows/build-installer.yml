@@ -1,0 +1,151 @@
+name: Build Windows Installer
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-windows:
+    name: Build Windows x64 Installer
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    env:
+      NODE_VERSION: '22'
+      BUILD_TARGET: 'electron'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          NODE_ENV: production
+
+      - name: Build main process
+        run: npm run build:main
+        env:
+          NODE_ENV: production
+
+      - name: Build preload script
+        run: npm run build:preload
+        env:
+          NODE_ENV: production
+
+      - name: Build renderer
+        run: npm run build:renderer
+        env:
+          NODE_ENV: production
+          BUILD_TARGET: electron
+
+      - name: Build installer (unpacked for verification)
+        run: npm run build:dir
+        env:
+          NODE_ENV: production
+
+      - name: Build NSIS installer
+        run: npx electron-builder --win nsis:x64
+        env:
+          NODE_ENV: production
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Verify installer exists
+        run: |
+          $installer = Get-ChildItem dist-electron/*.exe
+          if (-not $installer) {
+            Write-Error "No installer found in dist-electron/"
+            exit 1
+          }
+          Write-Host "Found installer: $($installer.FullName)"
+          Write-Host "Size: $([math]::Round($installer.Length / 1MB, 2)) MB"
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: belko-edu-platform-installer
+          path: dist-electron/*.exe
+          retention-days: 30
+          compression-level: 6
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist-electron/*.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Optional: Run security tests on PRs
+  security-check:
+    name: Security Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build main process
+        run: npm run build:main
+
+      - name: Run security tests
+        run: npm run test:security
+        env:
+          NODE_ENV: test
+
+      - name: Verify CSP
+        run: npm run test:csp
+        env:
+          NODE_ENV: test
+
+  # Optional: Format/lint check
+  lint:
+    name: Format & Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run formatter check
+        run: npm run lint
