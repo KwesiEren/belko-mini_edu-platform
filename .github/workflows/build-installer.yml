@@ -76,7 +76,7 @@ jobs:
           Write-Host "Size: $([math]::Round($installer.Length / 1MB, 2)) MB"
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: belko-edu-platform-installer
           path: dist-electron/*.exe
