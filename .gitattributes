@@ -144,3 +144,11 @@
 *.stl                filter=lfs diff=lfs merge=lfs -text
 *.nc                 filter=lfs diff=lfs merge=lfs -text
 *.mat                filter=lfs diff=lfs merge=lfs -text
+
+# ---------------------------------------------------------------------------
+# Build-critical assets excluded from LFS
+# ---------------------------------------------------------------------------
+# The Electron app icon is required by electron-builder during CI packaging.
+# actions/checkout does not fetch LFS objects by default, which makes CI see
+# the ~130-byte pointer file instead of the PNG. Keep it in plain git.
+src/assets/icon.png  -filter -diff -merge -text
