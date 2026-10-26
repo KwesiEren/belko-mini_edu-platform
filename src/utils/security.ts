@@ -1,7 +1,19 @@
 import DOMPurify from 'dompurify';
 import { z } from 'zod';
 
+// DOMPurify needs a DOM. In plain Node (CLI tests, main-process helpers) we fall
+// back to a conservative tag stripper so the sanitize helpers never throw.
+const hasDom = typeof window !== 'undefined' && typeof document !== 'undefined';
+
+function fallbackStripTags(text: string): string {
+  return text
+    .replace(/<[^>]*>/g, '')
+    .replace(/javascript\s*:/gi, '')
+    .replace(/\son\w+\s*=/gi, '');
+}
+
 export const sanitizeHtml = (html: string): string => {
+  if (!hasDom) return fallbackStripTags(html);
   return DOMPurify.sanitize(html, {
     ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p', 'br', 'span', 'div'],
     ALLOWED_ATTR: ['class', 'style'],
@@ -9,10 +21,12 @@ export const sanitizeHtml = (html: string): string => {
 };
 
 export const sanitizeText = (text: string): string => {
+  if (!hasDom) return fallbackStripTags(text);
   return DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
 };
 
 export const stripHtml = (html: string): string => {
+  if (!hasDom) return fallbackStripTags(html);
   return DOMPurify.sanitize(html, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
 };
 

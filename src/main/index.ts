@@ -10,12 +10,9 @@ import { ExportImportService } from '../services/export-import';
 import { AuditLogService } from '../services/export-import';
 import pino from 'pino';
 import pinoPretty from 'pino-pretty';
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
-import express from 'express';
-import { CSP_POLICY, applyCSPHeaders } from '../utils/security';
+import { CSP_POLICY } from '../utils/security';
 
-const logger = pino(pinoPretty({ colorize: true }), { name: 'main' });
+const logger = pino({ name: 'main' }, pinoPretty({ colorize: true }));
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -27,52 +24,9 @@ const networkService = new NetworkService();
 const exportImportService = new ExportImportService();
 const auditService = new AuditLogService();
 
-const expressApp = express();
-expressApp.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-      imgSrc: ["'self'", 'data:', 'blob:'],
-      connectSrc: ["'self'", 'ws:', 'wss:'],
-      mediaSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      frameAncestors: ["'none'"],
-      baseUri: ["'self'"],
-      formAction: ["'self'"],
-    },
-  },
-  crossOriginEmbedderPolicy: false,
-}));
-expressApp.use(express.json());
-expressApp.use(rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: { error: 'Too many requests, please try again later' },
-  standardHeaders: true,
-  legacyHeaders: false,
-}));
-expressApp.use((req, res, next) => {
-  applyCSPHeaders(res);
-  next();
-});
-
-expressApp.use((req, res, next) => {
-  if (req.body && typeof req.body === 'object') {
-    req.body = sanitizeObject(req.body);
-  }
-  next();
-});
-
-expressApp.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  logger.error({ err }, 'Express error');
-  res.status(500).json({ error: 'Internal server error' });
-});
-
 function createWindow(): void {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const appIconPath = join(__dirname, '../../src/assets/icon.png');
 
   const ses = session.fromPartition('persist:main');
   ses.webRequest.onHeadersReceived((details, callback) => {
@@ -96,9 +50,9 @@ function createWindow(): void {
     minHeight: 768,
     show: false,
     title: 'Belko Edu-Platform',
-    icon: join(__dirname, '../assets/icon.png'),
+    icon: existsSync(appIconPath) ? appIconPath : undefined,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -141,10 +95,24 @@ function createWindow(): void {
 }
 
 function createTray(): void {
-  const iconPath = join(__dirname, '../assets/tray-icon.png');
-  const icon = existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
+  const iconPath = join(__dirname, '../../src/assets/icon.png');
+  if (!existsSync(iconPath)) {
+    logger.warn({ iconPath }, 'Tray icon not found; continuing without a system tray icon');
+    return;
+  }
 
-  tray = new Tray(icon.resize({ width: 16, height: 16 }));
+  const icon = nativeImage.createFromPath(iconPath);
+  if (icon.isEmpty()) {
+    logger.warn({ iconPath }, 'Tray icon could not be loaded; continuing without a system tray icon');
+    return;
+  }
+
+  try {
+    tray = new Tray(icon.resize({ width: 16, height: 16 }));
+  } catch (error) {
+    logger.error({ error }, 'Failed to create tray icon; continuing without a system tray icon');
+    return;
+  }
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -199,10 +167,20 @@ async function initializeApp(): Promise<void> {
     createWindow();
     createTray();
 
-    const networkStatus = await networkService.start();
-    logger.info({ port: networkStatus.port }, 'Network service started');
+    try {
+      const networkStatus = await networkService.start();
+      logger.info({ port: networkStatus.port }, 'Network service started');
+    } catch (error) {
+      logger.error({ error }, 'Network service unavailable; continuing in offline mode');
+      void dialog.showMessageBox(mainWindow!, {
+        type: 'warning',
+        title: 'Local network unavailable',
+        message: 'Belko will continue in offline mode.',
+        detail: 'Sharing with devices on your local network is unavailable until network access can be enabled.',
+      });
+    }
 
-    const backupScheduler = networkService.startScheduler();
+    const backupScheduler = backupService.startScheduler();
     backupScheduler.unref();
 
     logger.info('Application initialized successfully');
@@ -453,7 +431,6 @@ app.on('before-quit', () => {
 app.on('will-quit', async () => {
   logger.info('Shutting down...');
   await networkService.stop();
-  backupService.startScheduler().unref();
   closeDatabase();
   logger.info('Shutdown complete');
 });

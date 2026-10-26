@@ -155,7 +155,9 @@ export function initializeAccessibility(): void {
   setFocusVisible();
   ensureAriaLabels();
   
-  const main = document.querySelector('main') || document.getElementById('root');
+  // Keep React's #root mount node stable; assigning its id here prevents
+  // createRoot() from finding the element during application startup.
+  const main = document.querySelector('main');
   if (main) {
     main.setAttribute('id', 'main-content');
     main.setAttribute('role', 'main');

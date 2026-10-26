@@ -1,5 +1,4 @@
 import Database from 'better-sqlite3';
-import { app } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import pino from 'pino';
@@ -8,8 +7,25 @@ const logger = pino({ name: 'database' });
 
 let db: Database.Database | null = null;
 
+function getElectronApp() {
+  try {
+    return require('electron').app;
+  } catch {
+    return null;
+  }
+}
+
 export function getDatabasePath(): string {
-  const userDataPath = app.getPath('userData');
+  const electronApp = getElectronApp();
+  let userDataPath: string;
+
+  if (electronApp) {
+    userDataPath = electronApp.getPath('userData');
+  } else {
+    // Fallback for CLI scripts - use current working directory or env var
+    userDataPath = process.env.BELKO_DATA_DIR || path.join(process.cwd(), 'data');
+  }
+
   const dbDir = path.join(userDataPath, 'database');
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });

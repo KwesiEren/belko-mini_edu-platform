@@ -226,6 +226,7 @@ footer { display: flex; align-items: center; justify-content: space-between; pad
 .setup-heading p { margin: 0; color: #778784; font-size: 11px; line-height: 1.5; }
 .logo-uploader { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; padding: 15px; border: 1px dashed #cbd6cf; border-radius: 12px; background: #fbfcfa; }
 .logo-placeholder { width: 64px; height: 64px; display: grid; place-items: center; flex: none; border-radius: 12px; color: #65837d; background: #e9efea; }
+.logo-placeholder img { width: 100%; height: 100%; object-fit: contain; border-radius: inherit; }
 .logo-uploader strong, .logo-uploader span { display: block; }
 .logo-uploader strong { color: #30484b; font-size: 11px; }
 .logo-uploader span { margin: 4px 0 9px; color: #879693; font-size: 9px; }

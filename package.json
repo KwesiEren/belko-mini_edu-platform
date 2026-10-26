@@ -1,7 +1,7 @@
 {
   "name": "belko-edu-platform",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Belko Edu-Platform - Standalone offline school management system for African schools",
   "author": "Belko Edu-Platform Team",
@@ -10,16 +10,18 @@
     "build:main": "vite build --config vite.main.config.ts",
     "build:preload": "vite build --config vite.preload.config.ts",
     "build:renderer": "vite build --config vite.config.ts --mode electron",
-    "build": "npm run build:main && npm run build:preload && npm run build:renderer && electron-builder",
-    "build:dir": "npm run build:main && npm run build:preload && npm run build:renderer && electron-builder --dir",
+    "build": "npm run build:main && npm run build:preload && npm run build:renderer && node scripts/prepare-electron-output.mjs && electron-builder",
+    "build:dir": "npm run build:main && npm run build:preload && npm run build:renderer && node scripts/prepare-electron-output.mjs && electron-builder --dir",
     "preview": "vite preview",
     "format": "oxfmt",
     "lint": "oxfmt --check",
-    "db:migrate": "node -e \"require('./dist/main/index.js').runMigrations()\"",
-    "test:security": "node -e \"require('./dist/main/index.js').runSecurityTests()\"",
-    "test:csp": "node -e \"require('./dist/main/index.js').verifyCSP()\""
+    "db:migrate": "tsx src/db/migrate-cli.ts run",
+    "db:migrate:status": "tsx src/db/migrate-cli.ts status",
+    "test:security": "tsx src/utils/security-tests.ts",
+    "test:csp": "tsx src/utils/security-tests.ts --verify-csp",
+    "typecheck": "tsc --noEmit"
   },
-  "main": "dist/main/index.js",
+  "main": "dist/main/index.cjs",
   "dependencies": {
     "@fontsource/montserrat": "^5.3.0",
     "@types/dompurify": "^3.2.0",
@@ -74,6 +76,7 @@
     "electron-builder": "^26.15.3",
     "oxfmt": "^0.72.0",
     "tailwindcss": "^4.0.0",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.0.5",
     "vite-plugin-electron": "^1.1.2",
@@ -94,6 +97,11 @@
       "src/assets/**/*",
       "public/**/*"
     ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/argon2/**/*",
+      "node_modules/sharp/**/*"
+    ],
     "extraResources": [
       {
         "from": "src/assets/animations",
@@ -105,7 +113,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "src/assets/icon.ico",
+      "icon": "src/assets/icon.png",
       "artifactName": "Belko-Edu-Platform-Setup-${version}.exe"
     },
     "nsis": {
@@ -114,13 +122,11 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Belko Edu-Platform",
-      "uninstallDisplayName": "Belko Edu-Platform",
-      "license": "LICENSE.txt",
-      "include": "build/nsis/installer.nsh"
+      "uninstallDisplayName": "Belko Edu-Platform"
     },
     "mac": {
       "target": "dmg",
-      "icon": "src/assets/icon.icns",
+      "icon": "src/assets/icon.png",
       "artifactName": "Belko-Edu-Platform-${version}.dmg"
     },
     "linux": {

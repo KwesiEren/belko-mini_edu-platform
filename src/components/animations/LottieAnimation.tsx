@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, memo } from 'react';
-import { Lottie } from 'lottie-react';
+import { Lottie, type LottieHandle } from 'lottie-react';
 import { useAnimation } from '../../context/AnimationContext';
 import { recolorLottie, getSchoolPrimaryColor } from '../../utils/recolorLottie';
 import { getAnimationMeta } from '../../utils/animationRegistry';
@@ -57,7 +57,7 @@ export const LottieAnimation = memo(function LottieAnimation({
   const { reducedMotion, animationSpeed } = useAnimation();
   const [animationData, setAnimationData] = useState<Record<string, unknown> | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const lottieRef = useRef<Lottie>(null);
+  const lottieRef = useRef<LottieHandle>(null);
   const meta = getAnimationMeta(keyName);
   const effectiveLoop = loop ?? meta?.defaultLoop ?? false;
   const effectiveSpeed = speed * animationSpeed;
@@ -101,7 +101,8 @@ export const LottieAnimation = memo(function LottieAnimation({
 
   useEffect(() => {
     if (lottieRef.current && animationData) {
-      lottieRef.current.goToAndPlay(0, true);
+      lottieRef.current.seek({ frame: 0 });
+      if (autoplay) lottieRef.current.play();
     }
   }, [animationData, autoplay]);
 
@@ -143,7 +144,7 @@ export const LottieAnimation = memo(function LottieAnimation({
 
   return (
     <Lottie
-      ref={lottieRef}
+      lottieRef={lottieRef}
       animationData={animationData}
       loop={effectiveLoop}
       autoplay={autoplay}

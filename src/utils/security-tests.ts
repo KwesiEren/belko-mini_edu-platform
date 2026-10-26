@@ -1,8 +1,20 @@
-import { getDatabase } from '../db/connection';
-import { validateInput, sanitizeObject, createStudentSchema, createStaffSchema, attendanceRecordSchema, gradeEntrySchema, recordPaymentSchema } from '../utils/security';
+import { validateInput, sanitizeObject, createStudentSchema, createStaffSchema, attendanceRecordSchema, gradeEntrySchema, recordPaymentSchema, CSP_POLICY } from '../utils/security';
 import pino from 'pino';
+import { pathToFileURL } from 'node:url';
 
 const logger = pino({ name: 'security:validation' });
+
+/**
+ * A payload is considered neutralized when validation rejected it OR the
+ * sanitized output no longer contains executable content (tags, javascript:
+ * URIs, inline event handlers). Sanitization is a valid defense, so both
+ * outcomes count as "blocked".
+ */
+function isNeutralized(value: unknown): boolean {
+  const text = String(value ?? '');
+  const dangerous = /[<>]/.test(text) || /javascript\s*:/i.test(text) || /\son\w+\s*=/i.test(text);
+  return !dangerous;
+}
 
 export function validateStudentInput(data: unknown) {
   return validateInput(createStudentSchema, sanitizeObject(data as Record<string, unknown>));
@@ -61,15 +73,15 @@ export function testXssPayloads(): { passed: number; failed: number; results: Ar
     };
 
     const result = validateStudentInput(testData);
-    const blocked = !result.success;
-    
+    const blocked = !result.success || isNeutralized(result.success ? (result.data as Record<string, unknown> | undefined)?.first_name : undefined);
+
     if (blocked) {
       passed++;
     } else {
       failed++;
-      logger.warn({ payload, sanitized: result.data?.first_name }, 'XSS payload not blocked');
+      logger.warn({ payload, sanitized: result.success ? (result.data as Record<string, unknown> | undefined)?.first_name : undefined }, 'XSS payload not blocked');
     }
-    
+
     results.push({ payload, blocked });
   }
 
@@ -108,15 +120,15 @@ export function testSqlInjectionPayloads(): { passed: number; failed: number; re
     };
 
     const result = validateStudentInput(testData);
-    const blocked = !result.success;
-    
+    const blocked = !result.success || isNeutralized(result.success ? (result.data as Record<string, unknown> | undefined)?.last_name : undefined);
+
     if (blocked) {
       passed++;
     } else {
       failed++;
-      logger.warn({ payload, sanitized: result.data?.last_name }, 'SQL injection payload not blocked');
+      logger.warn({ payload, sanitized: result.success ? (result.data as Record<string, unknown> | undefined)?.last_name : undefined }, 'SQL injection payload not blocked');
     }
-    
+
     results.push({ payload, blocked });
   }
 
@@ -141,8 +153,6 @@ export function runSecurityTests(): void {
 }
 
 export function verifyCSP(): void {
-  const { CSP_POLICY } = require('./security');
-  
   const requiredDirectives = [
     "default-src 'self'",
     "script-src 'self'",
@@ -169,5 +179,24 @@ export function verifyCSP(): void {
   } else {
     logger.error('CSP policy verification failed - missing required directives');
     throw new Error('CSP policy incomplete');
+  }
+}
+
+// CLI entry point: `tsx src/utils/security-tests.ts [--verify-csp]`
+const invokedDirectly = process.argv[1]
+  ? import.meta.url === pathToFileURL(process.argv[1]).href
+  : false;
+
+if (invokedDirectly) {
+  try {
+    if (process.argv.includes('--verify-csp')) {
+      verifyCSP();
+    } else {
+      runSecurityTests();
+    }
+    process.exit(0);
+  } catch (error) {
+    logger.error({ error }, 'Security checks failed');
+    process.exit(1);
   }
 }

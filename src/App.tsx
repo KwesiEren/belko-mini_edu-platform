@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { AnimationProvider } from "./context/AnimationContext";
 import { EmptyState } from "./components/animations/EmptyState";
 import { SaveConfirmation, useSaveConfirmation } from "./components/animations/SaveConfirmation";
@@ -278,6 +278,7 @@ function PlaceholderPage({ title }: { title: string }) {
 
 type SetupData = {
   schoolName: string;
+  schoolLogo: string;
   motto: string;
   country: string;
   currency: string;
@@ -389,8 +390,12 @@ function TemplateCard({
 
 function Onboarding({ onComplete }: { onComplete: (data: SetupData) => void }) {
   const [step, setStep] = useState(0);
+  const [logoPreview, setLogoPreview] = useState("");
+  const [logoError, setLogoError] = useState("");
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [data, setData] = useState<SetupData>({
     schoolName: "",
+    schoolLogo: "",
     motto: "",
     country: "Nigeria",
     currency: "NGN",
@@ -408,6 +413,44 @@ function Onboarding({ onComplete }: { onComplete: (data: SetupData) => void }) {
   });
 
   const update = (key: keyof SetupData, value: string) => setData((current) => ({ ...current, [key]: value }));
+  const handleLogoChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setLogoError("Choose an image file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setLogoError("Choose an image smaller than 5 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") return;
+      const image = new Image();
+      image.onload = () => {
+        const scale = Math.min(1, 512 / Math.max(image.naturalWidth, image.naturalHeight));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const context = canvas.getContext("2d");
+        if (!context) {
+          setLogoError("Belko could not process that image. Please try another file.");
+          return;
+        }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const optimizedImage = canvas.toDataURL("image/jpeg", 0.85);
+        update("schoolLogo", optimizedImage);
+        setLogoPreview(optimizedImage);
+        setLogoError("");
+      };
+      image.onerror = () => setLogoError("Belko could not open that image. Please try another file.");
+      image.src = reader.result;
+    };
+    reader.onerror = () => setLogoError("Belko could not read that image. Please try another file.");
+    reader.readAsDataURL(file);
+  };
   const chooseCountry = (country: string) => {
     setData((current) => ({ ...current, country, currency: currencies[country].code }));
   };
@@ -447,8 +490,8 @@ function Onboarding({ onComplete }: { onComplete: (data: SetupData) => void }) {
             <section className="setup-section">
               <div className="setup-heading"><span className="setup-heading-icon"><Icon name="home" /></span><div><h2>Tell us about your school</h2><p>This information appears on report cards, receipts and official documents.</p></div></div>
               <div className="logo-uploader">
-                <div className="logo-placeholder"><Icon name="plus" /></div>
-                <div><strong>Add your school logo</strong><span>PNG or JPG · Recommended square image</span><Button variant="secondary">Choose image</Button></div>
+                <div className="logo-placeholder">{logoPreview ? <img src={logoPreview} alt="School logo preview" /> : <Icon name="plus" />}</div>
+                <div><strong>{logoPreview ? "School logo selected" : "Add your school logo"}</strong><span>Image file · Up to 5 MB</span><Button variant="secondary" onClick={() => logoInputRef.current?.click()}>{logoPreview ? "Change image" : "Choose image"}</Button><input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />{logoError && <span role="alert">{logoError}</span>}</div>
               </div>
               <div className="field-grid">
                 <Field label="School name"><input value={data.schoolName} onChange={(event) => update("schoolName", event.target.value)} placeholder="e.g. Greenfield Academy" autoFocus /></Field>
@@ -564,10 +607,25 @@ export default function App() {
     show(message);
   };
 
+  const finishSetup = (data: SetupData) => {
+    setSchoolName(data.schoolName || "Your School");
+    try {
+      const previous = JSON.parse(localStorage.getItem("schoolSettings") || "{}");
+      localStorage.setItem("schoolSettings", JSON.stringify({
+        ...previous,
+        schoolName: data.schoolName,
+        logo: data.schoolLogo || previous.logo,
+      }));
+    } catch (error) {
+      console.error("Could not save school branding locally.", error);
+    }
+    setSetupComplete(true);
+  };
+
   if (!setupComplete) {
     return (
       <AnimationProvider>
-        <Onboarding onComplete={(data) => { setSchoolName(data.schoolName || "Your School"); setSetupComplete(true); }} />
+        <Onboarding onComplete={finishSetup} />
       </AnimationProvider>
     );
   }

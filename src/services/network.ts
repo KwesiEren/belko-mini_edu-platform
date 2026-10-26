@@ -43,7 +43,20 @@ export class NetworkService {
     });
 
     this.setupSocketHandlers();
-    this.httpServer.listen(this.port, '0.0.0.0');
+    await new Promise<void>((resolve, reject) => {
+      const handleError = (error: Error) => {
+        this.httpServer?.off('listening', handleListening);
+        reject(error);
+      };
+      const handleListening = () => {
+        this.httpServer?.off('error', handleError);
+        resolve();
+      };
+
+      this.httpServer.once('error', handleError);
+      this.httpServer.once('listening', handleListening);
+      this.httpServer.listen(this.port, '0.0.0.0');
+    });
 
     const networkInterfaces = require('node:os').networkInterfaces();
     let localIp = '127.0.0.1';

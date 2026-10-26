@@ -33,7 +33,9 @@ export abstract class BaseRepository<T extends BaseEntity> {
   protected abstract columns: string[];
   protected abstract primaryKey: string;
 
-  protected db = getDatabase();
+  protected get db(): ReturnType<typeof getDatabase> {
+    return getDatabase();
+  }
 
   protected buildWhereClause(where: Record<string, unknown>, includeDeleted = false): { clause: string; params: unknown[] } {
     const conditions: string[] = [];

@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { builtinModules } from 'node:module'
 import path from 'node:path'
 
 export default defineConfig({
@@ -7,12 +8,18 @@ export default defineConfig({
     lib: {
       entry: 'src/main/index.ts',
       formats: ['cjs'],
-      fileName: 'index',
+      fileName: 'index.cjs',
     },
     rollupOptions: {
-      external: ['electron', 'better-sqlite3', 'argon2', 'sharp'],
+      external: (id) =>
+        id === 'electron' ||
+        id === 'better-sqlite3' ||
+        id === 'argon2' ||
+        id === 'sharp' ||
+        id.startsWith('node:') ||
+        builtinModules.includes(id),
       output: {
-        entryFileNames: 'index.js',
+        entryFileNames: 'index.cjs',
       },
     },
     target: 'node20',

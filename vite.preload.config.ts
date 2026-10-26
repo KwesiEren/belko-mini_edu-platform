@@ -7,12 +7,12 @@ export default defineConfig({
     lib: {
       entry: 'src/preload/index.ts',
       formats: ['cjs'],
-      fileName: 'index',
+      fileName: 'index.cjs',
     },
     rollupOptions: {
       external: ['electron'],
       output: {
-        entryFileNames: 'index.js',
+        entryFileNames: 'index.cjs',
       },
     },
     target: 'node20',
