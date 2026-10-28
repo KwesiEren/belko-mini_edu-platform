@@ -13,7 +13,7 @@ export default defineConfig(({ mode, command }) => {
   const baseConfig = {
     base: isElectron ? './' : (process.env.FIGMA_PUBLIC_URL ? `${process.env.FIGMA_PUBLIC_URL}/` : '/'),
     build: {
-      sourcemap: emitSourcemaps ? 'inline' : false,
+      sourcemap: (emitSourcemaps ? 'inline' : false) as 'inline' | false,
       minify: !emitSourcemaps,
       emptyOutDir: true,
     },

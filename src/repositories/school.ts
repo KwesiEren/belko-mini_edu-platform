@@ -80,7 +80,7 @@ export class TermRepository extends BaseRepository<Term> {
   closeTerm(id: string, closedBy: string, reason: string): Term | null {
     const now = this.getNow();
     return this.update(id, {
-      is_closed: 1,
+      is_closed: true,
       closed_at: now,
       closed_by: closedBy,
       close_reason: reason,
@@ -89,10 +89,10 @@ export class TermRepository extends BaseRepository<Term> {
 
   reopenTerm(id: string): Term | null {
     return this.update(id, {
-      is_closed: 0,
-      closed_at: null,
-      closed_by: null,
-      close_reason: null,
+      is_closed: false,
+      closed_at: undefined,
+      closed_by: undefined,
+      close_reason: undefined,
     });
   }
 }

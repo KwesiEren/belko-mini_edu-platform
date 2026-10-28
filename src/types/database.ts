@@ -105,6 +105,7 @@ export interface StudentGuardian {
   student_id: string;
   guardian_id: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface Staff {
@@ -118,6 +119,8 @@ export interface Staff {
   role: 'principal' | 'secretary' | 'teacher';
   hire_date: string;
   is_active: boolean;
+  /** Linked login account (see migration 10). One user ↔ one staff record. */
+  user_id?: string | null;
   created_at: string;
   updated_at: string;
   deleted_at?: string;
@@ -200,6 +203,7 @@ export interface AttendanceRecord {
   remarks?: string;
   recorded_by: string;
   recorded_at: string;
+  created_at: string;
   updated_at: string;
   deleted_at?: string;
 }
@@ -235,6 +239,7 @@ export interface GradeBoundary {
   max_score: number;
   remark: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface GradeSheet {
@@ -268,6 +273,7 @@ export interface GradeEntry {
   is_draft: boolean;
   entered_by: string;
   entered_at: string;
+  created_at: string;
   updated_at: string;
   deleted_at?: string;
 }
@@ -406,6 +412,7 @@ export interface BackupRecord {
   status: 'completed' | 'failed' | 'corrupted';
   error_message?: string;
   created_at: string;
+  updated_at: string;
   completed_at?: string;
 }
 
@@ -424,7 +431,8 @@ export interface BackupSchedule {
 
 export interface AuditLog {
   id: string;
-  user_id: string;
+  /** Null for system-initiated actions (scheduled backups, imports). */
+  user_id?: string | null;
   action: string;
   entity_type: string;
   entity_id?: string;
@@ -433,6 +441,7 @@ export interface AuditLog {
   ip_address?: string;
   user_agent?: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface Session {
@@ -447,6 +456,7 @@ export interface Session {
   last_activity_at: string;
   is_revoked: boolean;
   created_at: string;
+  updated_at: string;
 }
 
 export interface DeviceSession {
@@ -472,6 +482,7 @@ export interface SyncQueue {
   conflict_resolution?: 'server_wins' | 'client_wins' | 'manual';
   created_at: string;
   synced_at?: string;
+  updated_at: string;
 }
 
 export interface ConflictLog {
@@ -483,13 +494,16 @@ export interface ConflictLog {
   resolved_by?: string;
   resolved_at?: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface Setting {
+  id: string;
   key: string;
   value: string;
   description?: string;
   is_public: boolean;
+  created_at: string;
   updated_at: string;
 }
 

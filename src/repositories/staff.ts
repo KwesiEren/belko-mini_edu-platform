@@ -8,7 +8,7 @@ const logger = pino({ name: 'repository:staff' });
 export class StaffRepository extends BaseRepository<Staff> {
   protected tableName = 'staff';
   protected primaryKey = 'id';
-  protected columns = ['employee_number', 'first_name', 'middle_name', 'last_name', 'email', 'phone', 'role', 'hire_date', 'is_active'];
+  protected columns = ['employee_number', 'first_name', 'middle_name', 'last_name', 'email', 'phone', 'role', 'hire_date', 'is_active', 'user_id'];
 
   findByEmployeeNumber(employeeNumber: string): Staff | null {
     return this.findAll({ where: { employee_number: employeeNumber }, limit: 1 })[0] || null;

@@ -82,7 +82,7 @@ export class StudentRepository extends BaseRepository<Student> {
   }
 
   unassignFromClass(studentId: string): Student | null {
-    return this.update(studentId, { class_id: null, stream_id: null });
+    return this.update(studentId, { class_id: undefined, stream_id: undefined });
   }
 
   getSiblings(studentId: string): Student[] {
@@ -128,7 +128,7 @@ export class GuardianRepository extends BaseRepository<Guardian> {
 export class StudentGuardianRepository extends BaseRepository<StudentGuardian> {
   protected tableName = 'student_guardians';
   protected primaryKey = 'id';
-  protected columns = ['student_id', 'guardian_id'];
+  protected columns = ['student_id', 'guardian_id', 'created_at', 'updated_at'];
 
   link(studentId: string, guardianId: string): StudentGuardian | null {
     const existing = this.findAll({ where: { student_id: studentId, guardian_id: guardianId }, limit: 1 })[0];

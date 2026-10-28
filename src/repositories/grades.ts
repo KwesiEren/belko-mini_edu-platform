@@ -60,7 +60,7 @@ export class GradeScaleRepository extends BaseRepository<GradeScale> {
 export class GradeBoundaryRepository extends BaseRepository<GradeBoundary> {
   protected tableName = 'grade_boundaries';
   protected primaryKey = 'id';
-  protected columns = ['grade_scale_id', 'letter', 'min_score', 'max_score', 'remark'];
+  protected columns = ['grade_scale_id', 'letter', 'min_score', 'max_score', 'remark', 'updated_at'];
 
   findByScale(gradeScaleId: string): GradeBoundary[] {
     return this.findAll({ where: { grade_scale_id: gradeScaleId }, orderBy: 'min_score DESC' });
@@ -159,14 +159,14 @@ export class GradeSheetRepository extends BaseRepository<GradeSheet> {
     const now = this.getNow();
     return this.update(sheetId, {
       status: 'draft',
-      submitted_at: null,
-      submitted_by: null,
-      reviewed_at: null,
-      reviewed_by: null,
-      approved_at: null,
-      approved_by: null,
-      published_at: null,
-      published_by: null,
+      submitted_at: undefined,
+      submitted_by: undefined,
+      reviewed_at: undefined,
+      reviewed_by: undefined,
+      approved_at: undefined,
+      approved_by: undefined,
+      published_at: undefined,
+      published_by: undefined,
     });
   }
 }
@@ -174,7 +174,7 @@ export class GradeSheetRepository extends BaseRepository<GradeSheet> {
 export class GradeEntryRepository extends BaseRepository<GradeEntry> {
   protected tableName = 'grade_entries';
   protected primaryKey = 'id';
-  protected columns = ['grade_sheet_id', 'student_id', 'component_id', 'score', 'is_draft', 'entered_by'];
+  protected columns = ['grade_sheet_id', 'student_id', 'component_id', 'score', 'is_draft', 'entered_by', 'entered_at', 'created_at', 'updated_at'];
 
   findBySheet(gradeSheetId: string): GradeEntry[] {
     return this.findAll({ where: { grade_sheet_id: gradeSheetId }, orderBy: 'student_id, component_id' });
@@ -199,13 +199,13 @@ export class GradeEntryRepository extends BaseRepository<GradeEntry> {
 
     if (existing) {
       return this.update(existing.id, {
-        score: data.score,
-        is_draft: data.is_draft ? 1 : 0,
+        score: data.score ?? 0,
+        is_draft: Boolean(data.is_draft),
         entered_by: data.entered_by,
       })!;
     }
 
-    return this.create({ ...data, entered_at: this.getNow() });
+    return this.create({ ...data, score: data.score ?? 0, is_draft: Boolean(data.is_draft), entered_at: this.getNow() });
   }
 
   bulkUpsert(entries: Array<{
@@ -231,15 +231,15 @@ export class GradeEntryRepository extends BaseRepository<GradeEntry> {
             UPDATE grade_entries
             SET score = ?, is_draft = ?, entered_by = ?, updated_at = ?
             WHERE id = ?
-          `).run(entry.score, entry.is_draft ? 1 : 0, entry.entered_by, now, existing.id);
-          results.push({ ...existing, score: entry.score, is_draft: entry.is_draft ? 1 : 0, entered_by: entry.entered_by, updated_at: now });
+          `).run(entry.score ?? 0, entry.is_draft ? 1 : 0, entry.entered_by, now, existing.id);
+          results.push({ ...existing, score: entry.score ?? 0, is_draft: entry.is_draft, entered_by: entry.entered_by, updated_at: now });
         } else {
           const id = this.generateId();
           this.db.prepare(`
             INSERT INTO grade_entries (id, grade_sheet_id, student_id, component_id, score, is_draft, entered_by, entered_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(id, entry.grade_sheet_id, entry.student_id, entry.component_id, entry.score, entry.is_draft ? 1 : 0, entry.entered_by, now, now);
-          results.push({ ...entry, id, entered_at: now, updated_at: now } as GradeEntry);
+          `).run(id, entry.grade_sheet_id, entry.student_id, entry.component_id, entry.score ?? 0, entry.is_draft ? 1 : 0, entry.entered_by, now, now);
+          results.push({ ...entry, id, score: entry.score ?? 0, entered_at: now, updated_at: now } as GradeEntry);
         }
       }
     });
@@ -325,7 +325,7 @@ export class ReportCardRepository extends BaseRepository<ReportCard> {
     const existing = this.findByStudentTerm(data.student_id, data.academic_year_id, data.term_id);
     if (existing) return existing;
 
-    return this.create({ ...data, is_final: 0 });
+    return this.create({ ...data, is_final: false });
   }
 
   markGenerated(reportCardId: string, pdfPath: string, generatedBy: string): ReportCard | null {
@@ -333,7 +333,7 @@ export class ReportCardRepository extends BaseRepository<ReportCard> {
       pdf_path: pdfPath,
       generated_at: this.getNow(),
       generated_by: generatedBy,
-      is_final: 1,
+      is_final: true,
     });
   }
 

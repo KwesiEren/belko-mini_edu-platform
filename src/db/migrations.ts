@@ -662,6 +662,47 @@ const migrations: Migration[] = [
       DROP TABLE IF EXISTS device_sessions;
     `,
   },
+  {
+    version: 10,
+    name: 'user_staff_link_and_nullable_audit_user',
+    up: `
+      -- audit_logs.user_id was NOT NULL with a hard FK to users(id), which made
+      -- every system-initiated audit write (backups, imports) fail with a FK
+      -- violation. Rebuild the table with a nullable user_id.
+      CREATE TABLE audit_logs_new (
+        id TEXT PRIMARY KEY,
+        user_id TEXT REFERENCES users(id),
+        action TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT,
+        old_values TEXT,
+        new_values TEXT,
+        ip_address TEXT,
+        user_agent TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      INSERT INTO audit_logs_new (id, user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, created_at)
+        SELECT id, user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, created_at
+        FROM audit_logs;
+
+      DROP TABLE audit_logs;
+      ALTER TABLE audit_logs_new RENAME TO audit_logs;
+
+      CREATE INDEX idx_audit_logs_user ON audit_logs(user_id);
+      CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
+      CREATE INDEX idx_audit_logs_created ON audit_logs(created_at);
+
+      -- Authentication creates users rows, but grade/attendance/fee actions
+      -- FK to staff(id). Link every user to its staff record.
+      ALTER TABLE staff ADD COLUMN user_id TEXT REFERENCES users(id);
+      CREATE UNIQUE INDEX idx_staff_user ON staff(user_id) WHERE user_id IS NOT NULL;
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_staff_user;
+      -- user_id column on staff cannot be dropped in SQLite; documented as irreversible.
+    `,
+  },
 ];
 
 function computeChecksum(sql: string): string {

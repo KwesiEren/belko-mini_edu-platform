@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { getDatabase, closeDatabase, initializeDatabase } from '../db/connection';
 import { BackupRecordRepository, BackupScheduleRepository, AuditLogRepository, SettingRepository } from '../repositories/system';
+import type { BackupRecord, BackupSchedule } from '../types/database';
 import pino from 'pino';
 
 const logger = pino({ name: 'service:backup' });
@@ -47,10 +48,10 @@ export class BackupService {
     return `belko-backup-${type}-${timestamp}.sqlite`;
   }
 
-  private computeChecksum(filePath: string): string {
+  private computeChecksum(filePath: string): Promise<string> {
     const hash = crypto.createHash('sha256');
     const stream = fs.createReadStream(filePath);
-    return new Promise((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
       stream.on('data', chunk => hash.update(chunk));
       stream.on('end', () => resolve(hash.digest('hex')));
       stream.on('error', reject);
@@ -83,7 +84,7 @@ export class BackupService {
       this.backupRepo.markCompleted(record.id, checksum, stats.size);
 
       this.auditRepo.log({
-        user_id: 'system',
+        user_id: null,
         action: 'backup_created',
         entity_type: 'backup',
         entity_id: record.id,
@@ -96,14 +97,14 @@ export class BackupService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.backupRepo.markFailed(record.id, errorMessage);
       logger.error({ error: errorMessage }, 'Backup failed');
-      return { success: false, error: errorMessage };
+      return Promise.resolve({ success: false, error: errorMessage });
     }
   }
 
   private async performBackup(outputPath: string): Promise<void> {
     const db = getDatabase();
     return new Promise((resolve, reject) => {
-      db.backup(outputPath, (err) => {
+      ;(db as any).backup(outputPath, (err: Error | null) => {
         if (err) {
           logger.error({ err }, 'SQLite backup failed');
           reject(err);
@@ -167,7 +168,7 @@ export class BackupService {
       });
 
       this.auditRepo.log({
-        user_id: 'system',
+        user_id: null,
         action: 'backup_restored',
         entity_type: 'backup',
         entity_id: newRecord.id,
@@ -180,7 +181,7 @@ export class BackupService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error({ error: errorMessage }, 'Restore failed');
       initializeDatabase();
-      return { success: false, error: errorMessage };
+      return Promise.resolve({ success: false, error: errorMessage });
     }
   }
 
@@ -232,7 +233,7 @@ export class BackupService {
       time: data.time || '02:00',
       retention_daily: data.retention_daily || 30,
       retention_monthly: data.retention_monthly || 12,
-      is_enabled: data.is_enabled ?? 1,
+      is_enabled: data.is_enabled ?? true,
     });
   }
 
@@ -277,7 +278,7 @@ export class BackupService {
     try {
       fs.copyFileSync(record.file_path, exportPath);
       this.auditRepo.log({
-        user_id: 'system',
+        user_id: null,
         action: 'backup_exported',
         entity_type: 'backup',
         entity_id: backupId,
@@ -290,9 +291,9 @@ export class BackupService {
     }
   }
 
-  importBackup(importPath: string): { success: boolean; backupId?: string; error?: string } {
+  importBackup(importPath: string): Promise<{ success: boolean; backupId?: string; error?: string }> {
     if (!fs.existsSync(importPath)) {
-      return { success: false, error: 'Import file not found' };
+      return Promise.resolve({ success: false, error: 'Import file not found' });
     }
 
     try {
@@ -302,7 +303,7 @@ export class BackupService {
 
       const checksum = crypto.createHash('sha256');
       const stream = fs.createReadStream(importPath);
-      return new Promise((resolve) => {
+      return new Promise<{ success: boolean; backupId?: string; error?: string }>((resolve) => {
         stream.on('data', chunk => checksum.update(chunk));
         stream.on('end', async () => {
           const fileChecksum = checksum.digest('hex');
@@ -331,7 +332,7 @@ export class BackupService {
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      return { success: false, error: errorMessage };
+      return Promise.resolve({ success: false, error: errorMessage });
     }
   }
 }

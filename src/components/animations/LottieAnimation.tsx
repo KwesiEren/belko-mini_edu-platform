@@ -71,8 +71,9 @@ export const LottieAnimation = memo(function LottieAnimation({
     let cancelled = false;
     const fileName = meta?.fileName;
     const loadAnimation = async () => {
+      if (!fileName) return;
       try {
-        const data = animationModules[fileName];
+        const data = animationModules[fileName as keyof typeof animationModules];
         if (!data) {
           throw new Error(`Animation not found: ${fileName}`);
         }
@@ -105,12 +106,6 @@ export const LottieAnimation = memo(function LottieAnimation({
       if (autoplay) lottieRef.current.play();
     }
   }, [animationData, autoplay]);
-
-  const handleComplete = () => {
-    if (!effectiveLoop) {
-      onComplete?.();
-    }
-  };
 
   const handleVisibilityChange = () => {
     if (!lottieRef.current) return;
@@ -145,7 +140,7 @@ export const LottieAnimation = memo(function LottieAnimation({
   return (
     <Lottie
       lottieRef={lottieRef}
-      animationData={animationData}
+      src={animationData}
       loop={effectiveLoop}
       autoplay={autoplay}
       style={{
@@ -155,7 +150,6 @@ export const LottieAnimation = memo(function LottieAnimation({
       }}
       className={className}
       speed={effectiveSpeed}
-      onComplete={handleComplete}
       aria-hidden="true"
     />
   );

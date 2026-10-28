@@ -8,7 +8,7 @@ const logger = pino({ name: 'repository:system' });
 export class BackupRecordRepository extends BaseRepository<BackupRecord> {
   protected tableName = 'backup_records';
   protected primaryKey = 'id';
-  protected columns = ['filename', 'file_path', 'file_size', 'checksum', 'type', 'status', 'error_message', 'completed_at'];
+  protected columns = ['filename', 'file_path', 'file_size', 'checksum', 'type', 'status', 'error_message', 'completed_at', 'created_at', 'updated_at'];
 
   findRecent(limit = 50): BackupRecord[] {
     return this.findAll({ orderBy: 'created_at', orderDir: 'DESC', limit });
@@ -95,10 +95,10 @@ export class BackupScheduleRepository extends BaseRepository<BackupSchedule> {
 export class AuditLogRepository extends BaseRepository<AuditLog> {
   protected tableName = 'audit_logs';
   protected primaryKey = 'id';
-  protected columns = ['user_id', 'action', 'entity_type', 'entity_id', 'old_values', 'new_values', 'ip_address', 'user_agent'];
+  protected columns = ['user_id', 'action', 'entity_type', 'entity_id', 'old_values', 'new_values', 'ip_address', 'user_agent', 'created_at', 'updated_at'];
 
   log(data: {
-    user_id: string;
+    user_id?: string | null;
     action: string;
     entity_type: string;
     entity_id?: string;
@@ -109,6 +109,7 @@ export class AuditLogRepository extends BaseRepository<AuditLog> {
   }): AuditLog {
     return this.create({
       ...data,
+      user_id: data.user_id || null,
       old_values: data.old_values ? JSON.stringify(data.old_values) : undefined,
       new_values: data.new_values ? JSON.stringify(data.new_values) : undefined,
     });
@@ -143,9 +144,9 @@ export class SettingRepository extends BaseRepository<Setting> {
   set(key: string, value: string, description?: string, isPublic = false): Setting {
     const existing = this.findById(key);
     if (existing) {
-      return this.update(key, { value, description, is_public: isPublic ? 1 : 0 })!;
+      return this.update(key, { value, description, is_public: isPublic })!;
     }
-    return this.create({ key, value, description, is_public: isPublic ? 1 : 0 });
+    return this.create({ key, value, description, is_public: isPublic });
   }
 
   getPublic(): Setting[] {
@@ -180,10 +181,10 @@ export class DeviceSessionRepository extends BaseRepository<DeviceSession> {
       return this.update(existing.id, {
         device_name: data.device_name,
         platform: data.platform,
-        is_active: 1,
+        is_active: true,
       })!;
     }
-    return this.create({ ...data, is_active: 1 });
+    return this.create({ ...data, is_active: true });
   }
 
   updateSync(deviceId: string): void {
@@ -203,7 +204,7 @@ export class DeviceSessionRepository extends BaseRepository<DeviceSession> {
 export class SyncQueueRepository extends BaseRepository<SyncQueue> {
   protected tableName = 'sync_queue';
   protected primaryKey = 'id';
-  protected columns = ['device_session_id', 'operation', 'entity_type', 'entity_id', 'payload', 'status', 'conflict_resolution', 'synced_at'];
+  protected columns = ['device_session_id', 'operation', 'entity_type', 'entity_id', 'payload', 'status', 'conflict_resolution', 'synced_at', 'created_at', 'updated_at'];
 
   findPending(deviceSessionId: string): SyncQueue[] {
     return this.findAll({ where: { device_session_id: deviceSessionId, status: 'pending' }, orderBy: 'created_at' });
@@ -256,7 +257,7 @@ export class SyncQueueRepository extends BaseRepository<SyncQueue> {
 export class ConflictLogRepository extends BaseRepository<ConflictLog> {
   protected tableName = 'conflict_logs';
   protected primaryKey = 'id';
-  protected columns = ['sync_queue_id', 'server_data', 'client_data', 'resolution', 'resolved_by', 'resolved_at'];
+  protected columns = ['sync_queue_id', 'server_data', 'client_data', 'resolution', 'resolved_by', 'resolved_at', 'created_at', 'updated_at'];
 
   findBySyncQueue(syncQueueId: string): ConflictLog[] {
     return this.findAll({ where: { sync_queue_id: syncQueueId } });

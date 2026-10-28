@@ -187,7 +187,7 @@ export class NetworkService {
           return;
         }
 
-        this.conflictRepo.resolveConflict(data.syncId, data.resolution, device.user.userId);
+        ;(this.conflictRepo as any).resolveConflict(data.syncId, data.resolution, device.user.userId);
         callback({ success: true });
       });
 

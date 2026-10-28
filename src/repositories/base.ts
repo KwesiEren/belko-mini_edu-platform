@@ -4,6 +4,19 @@ import pino from 'pino';
 
 const logger = pino({ name: 'repository' });
 
+const IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+/**
+ * Column/table identifiers interpolated into SQL must be plain SQLite
+ * identifiers. Values are always parameterized; this guards the one place
+ * where caller-supplied keys (filters, orderBy) end up in the SQL text.
+ */
+function assertIdentifier(name: string): void {
+  if (!IDENTIFIER_RE.test(name)) {
+    throw new Error(`Invalid SQL identifier: ${name}`);
+  }
+}
+
 export interface BaseEntity {
   id: string;
   created_at: string;
@@ -46,6 +59,7 @@ export abstract class BaseRepository<T extends BaseEntity> {
     }
 
     for (const [key, value] of Object.entries(where)) {
+      assertIdentifier(key);
       if (value === null) {
         conditions.push(`${this.tableName}.${key} IS NULL`);
       } else if (Array.isArray(value)) {
@@ -72,6 +86,21 @@ export abstract class BaseRepository<T extends BaseEntity> {
     return row as T;
   }
 
+  private tableColumnsCache?: Set<string>;
+
+  /**
+   * Actual column names of the backing table. Several tables (attendance_records,
+   * settings, fee_structure_components) do not follow the created_at/updated_at
+   * convention, so INSERT statements are built from what the table really has.
+   */
+  protected tableColumns(): Set<string> {
+    if (!this.tableColumnsCache) {
+      const rows = this.db.prepare(`PRAGMA table_info(${this.tableName})`).all() as { name: string }[];
+      this.tableColumnsCache = new Set(rows.map(r => r.name));
+    }
+    return this.tableColumnsCache;
+  }
+
   protected mapRows(rows: Record<string, unknown>[]): T[] {
     return rows.map(r => this.mapRow(r));
   }
@@ -85,9 +114,11 @@ export abstract class BaseRepository<T extends BaseEntity> {
   }
 
   findById(id: string, includeDeleted = false): T | null {
-    const clause = includeDeleted ? '' : `WHERE ${this.tableName}.deleted_at IS NULL`;
+    const clause = includeDeleted
+      ? `WHERE ${this.primaryKey} = ?`
+      : `WHERE ${this.tableName}.deleted_at IS NULL AND ${this.primaryKey} = ?`;
     const row = this.db.prepare(
-      `SELECT * FROM ${this.tableName} ${clause} AND ${this.primaryKey} = ?`
+      `SELECT * FROM ${this.tableName} ${clause}`
     ).get(id) as Record<string, unknown> | undefined;
 
     return row ? this.mapRow(row) : null;
@@ -99,6 +130,9 @@ export abstract class BaseRepository<T extends BaseEntity> {
 
     let sql = `SELECT * FROM ${this.tableName} ${clause}`;
     if (orderBy) {
+      if (orderBy.includes(',') ? !orderBy.split(',').every(part => IDENTIFIER_RE.test(part.trim().split(/\s+/)[0])) : !IDENTIFIER_RE.test(orderBy.split(/\s+/)[0])) {
+        throw new Error(`Invalid SQL identifier in orderBy: ${orderBy}`);
+      }
       sql += ` ORDER BY ${orderBy} ${orderDir}`;
     }
     if (limit) {
@@ -140,14 +174,31 @@ export abstract class BaseRepository<T extends BaseEntity> {
     const now = this.getNow();
     const id = this.generateId();
 
-    const columns = [this.primaryKey, ...this.columns, 'created_at', 'updated_at'];
-    const placeholders = columns.map(() => '?').join(',');
-    const values = [id, ...Object.values(entity), now, now];
+    const tableColumns = this.tableColumns();
+    const insertColumns: string[] = [this.primaryKey];
+    const insertValues: unknown[] = [id];
+
+    // Map declared columns by name — never by object key order — and skip any
+    // that the table does not actually have.
+    for (const col of this.columns) {
+      if (tableColumns.has(col)) {
+        insertColumns.push(col);
+        insertValues.push((entity as Record<string, unknown>)[col] ?? null);
+      }
+    }
+    for (const ts of ['created_at', 'updated_at']) {
+      if (tableColumns.has(ts)) {
+        insertColumns.push(ts);
+        insertValues.push(now);
+      }
+    }
+
+    const placeholders = insertColumns.map(() => '?').join(',');
 
     runInTransaction(() => {
       this.db.prepare(
-        `INSERT INTO ${this.tableName} (${columns.join(', ')}) VALUES (${placeholders})`
-      ).run(...values);
+        `INSERT INTO ${this.tableName} (${insertColumns.join(', ')}) VALUES (${placeholders})`
+      ).run(...insertValues);
     });
 
     return this.findById(id)!;
@@ -157,11 +208,19 @@ export abstract class BaseRepository<T extends BaseEntity> {
     if (entities.length === 0) return [];
 
     const now = this.getNow();
-    const columns = [this.primaryKey, ...this.columns, 'created_at', 'updated_at'];
-    const placeholders = columns.map(() => '?').join(',');
+    const tableColumns = this.tableColumns();
+
+    const insertColumns: string[] = [this.primaryKey];
+    for (const col of this.columns) {
+      if (tableColumns.has(col)) insertColumns.push(col);
+    }
+    for (const ts of ['created_at', 'updated_at']) {
+      if (tableColumns.has(ts)) insertColumns.push(ts);
+    }
+    const placeholders = insertColumns.map(() => '?').join(',');
 
     const stmt = this.db.prepare(
-      `INSERT INTO ${this.tableName} (${columns.join(', ')}) VALUES (${placeholders})`
+      `INSERT INTO ${this.tableName} (${insertColumns.join(', ')}) VALUES (${placeholders})`
     );
 
     const ids: string[] = [];
@@ -170,7 +229,15 @@ export abstract class BaseRepository<T extends BaseEntity> {
       for (const entity of entities) {
         const id = this.generateId();
         ids.push(id);
-        const values = [id, ...Object.values(entity), now, now];
+        const values: unknown[] = [id];
+        for (const col of this.columns) {
+          if (tableColumns.has(col)) {
+            values.push((entity as Record<string, unknown>)[col] ?? null);
+          }
+        }
+        for (const ts of ['created_at', 'updated_at']) {
+          if (tableColumns.has(ts)) values.push(now);
+        }
         stmt.run(...values);
       }
     });
@@ -183,6 +250,9 @@ export abstract class BaseRepository<T extends BaseEntity> {
     if (!existing) return null;
 
     const now = this.getNow();
+    for (const key of Object.keys(updates)) {
+      assertIdentifier(key);
+    }
     const setClause = Object.keys(updates).map(key => `${key} = ?`).join(', ');
     const values = [...Object.values(updates), now, id];
 
@@ -229,8 +299,9 @@ export abstract class BaseRepository<T extends BaseEntity> {
     return this.count(where, includeDeleted) > 0;
   }
 
-  execute(sql: string, params: unknown[] = []): Database.RunResult {
-    return runInTransaction(() => this.db.prepare(sql).run(...params));
+  execute(sql: string, params: unknown[] = []): { changes: number; lastInsertRowid: number } {
+    const result = runInTransaction(() => this.db.prepare(sql).run(...params));
+    return { changes: result.changes, lastInsertRowid: Number(result.lastInsertRowid) };
   }
 
   query<TResult = Record<string, unknown>>(sql: string, params: unknown[] = []): TResult[] {

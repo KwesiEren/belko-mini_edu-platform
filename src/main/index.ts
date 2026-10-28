@@ -4,10 +4,13 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { initializeDatabase, closeDatabase, getDatabasePath } from '../db/connection';
 import { runMigrations } from '../db/migrations';
 import { AuthService } from '../services/auth';
-import { BackupService } from '../services/backup';
+import { BackupService, type BackupOptions } from '../services/backup';
 import { NetworkService } from '../services/network';
 import { ExportImportService } from '../services/export-import';
 import { AuditLogService } from '../services/export-import';
+import { SetupService } from '../services/setup';
+import { SettingRepository } from '../repositories/system';
+import { DomainIpc } from './domains';
 import pino from 'pino';
 import pinoPretty from 'pino-pretty';
 import { CSP_POLICY } from '../utils/security';
@@ -23,6 +26,7 @@ const backupService = new BackupService();
 const networkService = new NetworkService();
 const exportImportService = new ExportImportService();
 const auditService = new AuditLogService();
+const setupService = new SetupService();
 
 function createWindow(): void {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -195,6 +199,11 @@ async function setupIpcHandlers(): Promise<void> {
 
   ipcMain.handle('app:get-path', (_, name: string) => app.getPath(name as any));
 
+  // Domain surface: setup, dashboard, students, classes, subjects, staff,
+  // users, attendance, grades, fees, schools, academic calendar, settings,
+  // backups — with session verification, permission checks and Zod validation.
+  new DomainIpc(authService, setupService, backupService).register();
+
   ipcMain.handle('auth:login', async (_, credentials: { email: string; password: string; deviceInfo?: any }) => {
     try {
       const result = await authService.login(credentials.email, credentials.password, credentials.deviceInfo);
@@ -233,7 +242,7 @@ async function setupIpcHandlers(): Promise<void> {
     return { success };
   });
 
-  ipcMain.handle('db:backup', async (_, options: { type?: 'auto' | 'manual' | 'pre_migration' | 'pre_import' }) => {
+  ipcMain.handle('db:backup', async (_, options: BackupOptions = { type: 'manual' }) => {
     const result = await backupService.createBackup(options);
     return result;
   });
@@ -321,7 +330,7 @@ async function setupIpcHandlers(): Promise<void> {
       const blob = new Blob([buffer]);
       const file = new File([blob], 'import.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const result = await exportImportService.importFromFile(file, options);
-      return { success: true, ...result };
+      return { ...result, success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Import failed' };
     }
@@ -333,7 +342,7 @@ async function setupIpcHandlers(): Promise<void> {
       const blob = new Blob([buffer]);
       const file = new File([blob], 'full-backup.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const result = await exportImportService.importFullBackup(file);
-      return { success: true, ...result };
+      return { ...result, success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Full backup import failed' };
     }
@@ -365,30 +374,10 @@ async function setupIpcHandlers(): Promise<void> {
   });
 
   ipcMain.handle('settings:get', async (_, key: string) => {
-    const db = require('better-sqlite3')(getDatabasePath());
-    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
-    db.close();
-    return row?.value || null;
+    const setting = new SettingRepository().get(key);
+    return setting?.value || null;
   });
-
-  ipcMain.handle('settings:set', async (_, key: string, value: string, description?: string, isPublic?: boolean) => {
-    const db = require('better-sqlite3')(getDatabasePath());
-    const now = new Date().toISOString();
-    db.prepare(`
-      INSERT INTO settings (key, value, description, is_public, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value, description = excluded.description, is_public = excluded.is_public, updated_at = excluded.updated_at
-    `).run(key, value, description || '', isPublic ? 1 : 0, now);
-    db.close();
-    return { success: true };
-  });
-
-  ipcMain.handle('settings:get-all', async () => {
-    const db = require('better-sqlite3')(getDatabasePath());
-    const rows = db.prepare('SELECT * FROM settings').all();
-    db.close();
-    return rows;
-  });
+  // settings:get-all and settings:set are registered by DomainIpc.
 
   ipcMain.handle('audit:log', async (_, data: any) => {
     auditService.log(data);

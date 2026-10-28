@@ -76,9 +76,20 @@ export class FeeBillRepository extends BaseRepository<FeeBill> {
   }
 
   findByTerm(academicYearId: string, termId: string, classId?: string): FeeBill[] {
-    const where: Record<string, unknown> = { academic_year_id: academicYearId, term_id: termId };
-    if (classId) where.student_id = classId;
-    return this.findAll({ where, orderBy: 'student_id' });
+    if (!classId) {
+      return this.findAll({
+        where: { academic_year_id: academicYearId, term_id: termId },
+        orderBy: 'student_id',
+      });
+    }
+    // Class filter requires a join through students — the bill itself has no class.
+    return this.db.prepare(`
+      SELECT fb.* FROM fee_bills fb
+      JOIN students s ON fb.student_id = s.id
+      WHERE fb.academic_year_id = ? AND fb.term_id = ? AND s.class_id = ?
+        AND fb.deleted_at IS NULL AND s.deleted_at IS NULL
+      ORDER BY fb.student_id
+    `).all(academicYearId, termId, classId) as FeeBill[];
   }
 
   generateBillsForStructure(
@@ -126,6 +137,7 @@ export class FeeBillRepository extends BaseRepository<FeeBill> {
           balance: totalAmount,
           status: 'pending',
           due_date: dueDate,
+          generated_at: now,
           generated_by: generatedBy,
         });
         bills.push(bill);
@@ -212,13 +224,21 @@ export class FeePaymentRepository extends BaseRepository<FeePayment> {
       throw new Error('Cannot record payment on paid or voided bill');
     }
 
+    if (!(data.amount > 0)) {
+      throw new Error('Payment amount must be positive');
+    }
+
+    if (data.amount > bill.balance) {
+      throw new Error(`Amount exceeds outstanding balance of ${bill.balance}`);
+    }
+
     const prefix = `RCPT-${data.academic_year_id.replace('/', '-')}-`;
     const receiptNumber = this.getNextReceiptNumber(prefix, data.academic_year_id);
 
     const payment = this.create({
       ...data,
       receipt_number: receiptNumber,
-      is_void: 0,
+      is_void: false,
     });
 
     new FeeBillRepository().updateBalance(data.bill_id);
@@ -233,7 +253,7 @@ export class FeePaymentRepository extends BaseRepository<FeePayment> {
 
     const now = this.getNow();
     const updated = this.update(paymentId, {
-      is_void: 1,
+      is_void: true,
       void_reason: reason,
       voided_at: now,
       voided_by: voidedBy,

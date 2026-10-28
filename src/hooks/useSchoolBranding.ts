@@ -6,10 +6,14 @@ export interface SchoolBranding {
   logo?: string;
 }
 
+export interface SchoolBrandingWithUpdater extends SchoolBranding {
+  updateBranding: (partial: Partial<SchoolBranding>) => void;
+}
+
 const DEFAULT_COLOR = '#d8ed88';
 const STORAGE_KEY = 'schoolSettings';
 
-export function useSchoolBranding(): SchoolBranding {
+export function useSchoolBranding(): SchoolBrandingWithUpdater {
   const [branding, setBranding] = useState<SchoolBranding>(() => {
     if (typeof window === 'undefined') {
       return { primaryColor: DEFAULT_COLOR, schoolName: '' };

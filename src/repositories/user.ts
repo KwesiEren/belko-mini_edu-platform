@@ -38,7 +38,7 @@ export class UserRepository extends BaseRepository<User> {
       password_hash,
       full_name: data.full_name,
       role: data.role,
-      is_active: 1,
+      is_active: true,
     });
   }
 
@@ -79,7 +79,7 @@ export class UserRepository extends BaseRepository<User> {
 export class SessionRepository extends BaseRepository<Session> {
   protected tableName = 'sessions';
   protected primaryKey = 'id';
-  protected columns = ['user_id', 'token_hash', 'refresh_token_hash', 'device_name', 'ip_address', 'user_agent', 'expires_at', 'last_activity_at', 'is_revoked'];
+  protected columns = ['user_id', 'token_hash', 'refresh_token_hash', 'device_name', 'ip_address', 'user_agent', 'expires_at', 'last_activity_at', 'is_revoked', 'created_at', 'updated_at'];
 
   createSession(data: {
     user_id: string;
@@ -93,7 +93,7 @@ export class SessionRepository extends BaseRepository<Session> {
     return this.create({
       ...data,
       last_activity_at: this.getNow(),
-      is_revoked: 0,
+      is_revoked: false,
     });
   }
 

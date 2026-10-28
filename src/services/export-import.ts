@@ -12,7 +12,6 @@ import {
   FeePaymentRepository,
   BackupRecordRepository, AuditLogRepository,
 } from '../repositories';
-import { AuditLogService } from './audit';
 import pino from 'pino';
 
 const logger = pino({ name: 'service:export-import' });
@@ -42,7 +41,7 @@ export interface ImportOptions {
 }
 
 interface EntityConfig {
-  repository: keyof ExportImportService;
+  repository: string;
   fields: string[];
   uniqueFields: string[];
   requiredFields: string[];
@@ -119,8 +118,8 @@ export class ExportImportService {
   private auditRepo = new AuditLogRepository();
   private auditService = new AuditLogService();
 
-  private getRepo(repoName: keyof ExportImportService): any {
-    return this[repoName];
+  private getRepo(repoName: string): any {
+    return (this as Record<string, any>)[repoName];
   }
 
   async exportData(options: ExportOptions): Promise<Blob> {
@@ -154,19 +153,19 @@ export class ExportImportService {
   private async getEntityData(entityType: string, filters: Record<string, unknown>): Promise<Record<string, unknown>[]> {
     switch (entityType) {
       case 'students':
-        return this.studentRepo.findAll({ where: filters, includeDeleted: false });
+        return this.studentRepo.findAll({ where: filters, includeDeleted: false }) as unknown as Record<string, unknown>[];
       case 'guardians':
-        return this.guardianRepo.findAll({ where: filters, includeDeleted: false });
+        return this.guardianRepo.findAll({ where: filters, includeDeleted: false }) as unknown as Record<string, unknown>[];
       case 'staff':
-        return this.staffRepo.findAll({ where: filters, includeDeleted: false });
+        return this.staffRepo.findAll({ where: filters, includeDeleted: false }) as unknown as Record<string, unknown>[];
       case 'classes':
-        return this.classRepo.findAll({ where: filters, includeDeleted: false });
+        return this.classRepo.findAll({ where: filters, includeDeleted: false }) as unknown as Record<string, unknown>[];
       case 'subjects':
-        return this.subjectRepo.findAll({ where: filters, includeDeleted: false });
+        return this.subjectRepo.findAll({ where: filters, includeDeleted: false }) as unknown as Record<string, unknown>[];
       case 'fee_components':
-        return this.feeComponentRepo.findAll({ where: filters, includeDeleted: false });
+        return this.feeComponentRepo.findAll({ where: filters, includeDeleted: false }) as unknown as Record<string, unknown>[];
       case 'fee_structures':
-        return this.feeStructureRepo.findAll({ where: filters, includeDeleted: false });
+        return this.feeStructureRepo.findAll({ where: filters, includeDeleted: false }) as unknown as Record<string, unknown>[];
       default:
         return [];
     }
@@ -247,7 +246,7 @@ export class ExportImportService {
 
     if (!dryRun && (result.imported > 0 || result.updated > 0)) {
       this.auditService.log({
-        user_id: 'import',
+        user_id: null,
         action: 'data_imported',
         entity_type: entityType,
         new_values: { imported: result.imported, updated: result.updated, errors: result.errors.length },
@@ -397,7 +396,7 @@ export class ExportImportService {
 export class AuditLogService {
   private auditRepo = new AuditLogRepository();
 
-  log(data: { user_id: string; action: string; entity_type: string; entity_id?: string; old_values?: Record<string, unknown>; new_values?: Record<string, unknown>; ip_address?: string; user_agent?: string }): void {
+  log(data: { user_id?: string | null; action: string; entity_type: string; entity_id?: string; old_values?: Record<string, unknown>; new_values?: Record<string, unknown>; ip_address?: string; user_agent?: string }): void {
     this.auditRepo.log(data);
   }
 

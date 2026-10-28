@@ -32,7 +32,9 @@ export function LockAnimation({
         <LottieAnimation keyName="lock-screen" style={{ width: '100%', height: '100%' }} />
       </div>
       <div>
-        <Icon name="shield" size={28} style={{ color: '#2d827b', marginBottom: '12px' }} />
+        <div style={{ color: '#2d827b', marginBottom: '12px' }}>
+          <Icon name="shield" size={28} />
+        </div>
         <p style={{ margin: '0 0 8px', color: '#183237', fontSize: '16px', fontWeight: 600 }}>
           Screen Locked
         </p>

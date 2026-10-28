@@ -60,7 +60,7 @@ export class AttendanceSessionRepository extends BaseRepository<AttendanceSessio
 export class AttendanceRecordRepository extends BaseRepository<AttendanceRecord> {
   protected tableName = 'attendance_records';
   protected primaryKey = 'id';
-  protected columns = ['session_id', 'student_id', 'status', 'remarks', 'recorded_by'];
+  protected columns = ['session_id', 'student_id', 'status', 'remarks', 'recorded_by', 'recorded_at', 'created_at', 'updated_at'];
 
   findBySession(sessionId: string): AttendanceRecord[] {
     return this.findAll({ where: { session_id: sessionId }, orderBy: 'student_id' });
@@ -145,7 +145,7 @@ export class AttendanceRecordRepository extends BaseRepository<AttendanceRecord>
             SET status = 'present', remarks = NULL, recorded_by = ?, updated_at = ?
             WHERE id = ?
           `).run(teacherId, now, existing.id);
-          records.push({ ...existing, status: 'present', remarks: null, recorded_by: teacherId, updated_at: now });
+          records.push({ ...existing, status: 'present', remarks: undefined, recorded_by: teacherId, updated_at: now });
         } else {
           const record = this.create({
             session_id: sessionId,
@@ -163,7 +163,7 @@ export class AttendanceRecordRepository extends BaseRepository<AttendanceRecord>
   }
 
   getAttendanceStats(studentId: string, termId: string): {
-    total_sessions: number;
+    total: number;
     present: number;
     absent: number;
     late: number;
@@ -187,7 +187,7 @@ export class AttendanceRecordRepository extends BaseRepository<AttendanceRecord>
     const total = stats.present + stats.absent + stats.late + stats.excused;
     const percentage = total > 0 ? Math.round(((stats.present + stats.late) / total) * 10000) / 100 : 0;
 
-    return { ...stats, total_sessions: total, percentage };
+    return { ...stats, total, percentage };
   }
 
   getClassAttendanceReport(classId: string, termId: string, streamId?: string): {
