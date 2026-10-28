@@ -150,6 +150,10 @@ export const LottieAnimation = memo(function LottieAnimation({
       }}
       className={className}
       speed={effectiveSpeed}
+      subscriptions={{
+        complete: onComplete,
+        loopCompleted: onComplete,
+      }}
       aria-hidden="true"
     />
   );

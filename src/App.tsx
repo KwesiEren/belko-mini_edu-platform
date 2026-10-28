@@ -4,6 +4,13 @@ import { EmptyState } from "./components/animations/EmptyState";
 import { SaveConfirmation, useSaveConfirmation } from "./components/animations/SaveConfirmation";
 import { SetupStepAnimation } from "./components/animations/SetupStepAnimation";
 import { Icon, type IconName } from "./components/Icon";
+import Grades from "./pages/Grades";
+import Attendance from "./pages/Attendance";
+import Network from "./pages/Network";
+import Settings from "./pages/Settings";
+import LockScreen from "./components/LockScreen";
+import Students from "./pages/Students";
+import Fees from "./pages/Fees";
 import type { ElectronAPI, IpcResult } from "./types/electron-api";
 
 declare global {
@@ -14,7 +21,16 @@ declare global {
 
 const electronAPI = window.electronAPI;
 
-type NavLabel = "Overview" | "Students" | "Attendance" | "Grades & reports" | "Fees & payments" | "Calendar" | "Reports" | "Settings";
+type NavLabel =
+  | "Overview"
+  | "Students"
+  | "Attendance"
+  | "Grades & reports"
+  | "Fees & payments"
+  | "Calendar"
+  | "Reports"
+  | "Network"
+  | "Settings";
 
 const navItems: { label: NavLabel; icon: IconName }[] = [
   { label: "Overview", icon: "home" },
@@ -24,6 +40,7 @@ const navItems: { label: NavLabel; icon: IconName }[] = [
   { label: "Fees & payments", icon: "fees" },
   { label: "Calendar", icon: "calendar" },
   { label: "Reports", icon: "reports" },
+  { label: "Network", icon: "wifi" },
 ];
 
 function Button({
@@ -631,6 +648,7 @@ function MainApp({
 }) {
   const [active, setActive] = useState<NavLabel>("Overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [locked, setLocked] = useState(false);
   const [school, setSchool] = useState<{ name: string; } | null>(null);
   const { toasts, show } = useSaveConfirmation();
 
@@ -663,14 +681,32 @@ function MainApp({
               <div className="offline-badge"><span /><strong>Offline & secure</strong></div>
               <Button variant="icon" className="notification-button" ariaLabel="Notifications"><Icon name="bell" /><span className="notification-dot" /></Button>
               <Button variant="secondary" className="switch-user" onClick={() => showToast("Switch user not yet implemented")}>Switch user</Button>
+              <Button variant="icon" onClick={() => setLocked(true)} ariaLabel="Lock screen"><Icon name="shield" /></Button>
             </div>
           </header>
           <div className="content-wrap">
-            {active === "Overview" ? <Overview token={token} schoolName={school?.name || "Belko School"} /> : <PlaceholderPage title={active} />}
+            {active === "Overview" ? (
+              <Overview token={token} schoolName={school?.name || "Belko School"} />
+            ) : active === "Attendance" ? (
+              <Attendance token={token} />
+            ) : active === "Settings" ? (
+              <Settings token={token} role={user.role} />
+            ) : active === "Network" ? (
+              <Network token={token} />
+            ) : active === "Students" ? (
+              <Students token={token} />
+            ) : active === "Fees & payments" ? (
+              <Fees token={token} />
+            ) : active === "Grades & reports" ? (
+              <Grades token={token} />
+            ) : (
+              <PlaceholderPage title={active} />
+            )}
             <footer><span>Belko works entirely on this school computer.</span><span><span className="footer-dot" /> All changes saved</span></footer>
           </div>
         </main>
         {toasts.map((t) => <SaveConfirmation key={t.id} message={t.message} />)}
+        <LockScreen isLocked={locked} onUnlock={() => setLocked(false)} />
       </div>
     </AnimationProvider>
   );
