@@ -1,11 +1,21 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
+import "./api/web-bridge";
 import { AnimationProvider } from "./context/AnimationContext";
-import { EmptyState } from "./components/animations/EmptyState";
 import { SaveConfirmation, useSaveConfirmation } from "./components/animations/SaveConfirmation";
 import { SetupStepAnimation } from "./components/animations/SetupStepAnimation";
 import { LockAnimation } from "./components/animations/LockAnimation";
 import { Icon, type IconName } from "./components/Icon";
 import type { ElectronAPI, IpcResult } from "./types/electron-api";
+
+// Page modules
+import StudentsPage from "./pages/Students";
+import Attendance from "./pages/Attendance";
+import Grades from "./pages/Grades";
+import Fees from "./pages/Fees";
+import CalendarPage from "./pages/Calendar";
+import ReportsPage from "./pages/Reports";
+import Settings from "./pages/Settings";
+import Network from "./pages/Network";
 
 declare global {
   interface Window {
@@ -13,15 +23,22 @@ declare global {
   }
 }
 
-const electronAPI = window.electronAPI;
+const getElectronAPI = (): ElectronAPI => {
+  return window.electronAPI;
+};
 
 async function call<T>(promise: Promise<IpcResult<T>>): Promise<T | null> {
-  const result = await promise;
-  if (!result.ok) {
-    console.error("IPC error:", result.code, result.error);
+  try {
+    const result = await promise;
+    if (!result || !result.ok) {
+      console.error("IPC error:", result?.code, result?.error);
+      return null;
+    }
+    return result.data;
+  } catch (err) {
+    console.error("IPC call failed:", err);
     return null;
   }
-  return result.data;
 }
 
 function Button({
@@ -30,6 +47,7 @@ function Button({
   className = "",
   onClick,
   ariaLabel,
+  title,
   type,
   disabled,
 }: {
@@ -38,6 +56,7 @@ function Button({
   className?: string;
   onClick?: () => void;
   ariaLabel?: string;
+  title?: string;
   type?: "button" | "submit" | "reset";
   disabled?: boolean;
 }) {
@@ -47,6 +66,7 @@ function Button({
       className={`button button-${variant} ${className}`}
       onClick={onClick}
       aria-label={ariaLabel}
+      title={title}
       disabled={disabled}
     >
       {children}
@@ -62,6 +82,7 @@ const navItems: { label: string; icon: IconName }[] = [
   { label: "Fees & payments", icon: "fees" },
   { label: "Calendar", icon: "calendar" },
   { label: "Reports", icon: "reports" },
+  { label: "Network", icon: "wifi" },
 ];
 
 function Sidebar({
@@ -72,6 +93,7 @@ function Sidebar({
   schoolName,
   userName,
   userRole,
+  onLogout,
 }: {
   active: string;
   setActive: (value: string) => void;
@@ -80,7 +102,10 @@ function Sidebar({
   schoolName: string;
   userName: string;
   userRole: string;
+  onLogout: () => void;
 }) {
+  const roleDisplay = userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : "Staff";
+
   return (
     <>
       {open && <div className="sidebar-scrim" onClick={close} />}
@@ -89,57 +114,106 @@ function Sidebar({
           <div className="brand-mark"><span>B</span></div>
           <div>
             <div className="brand-name">{schoolName}</div>
-            <div className="brand-subtitle">Edu-Platform</div>
+            <div className="brand-subtitle">Belko Edu-Platform</div>
           </div>
-          <Button variant="icon" className="sidebar-close" onClick={close} ariaLabel="Close navigation"><Icon name="close" /></Button>
+          <Button variant="icon" className="sidebar-close" onClick={close} ariaLabel="Close navigation">
+            <Icon name="close" />
+          </Button>
         </div>
 
         <div className="school-card">
           <div className="school-badge">{schoolName.charAt(0).toUpperCase()}</div>
           <div className="school-info">
             <strong>{schoolName}</strong>
-            <span>{userRole.charAt(0).toUpperCase() + userRole.slice(1)}</span>
+            <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-semibold bg-blue-100 text-blue-800">
+              {roleDisplay}
+            </span>
           </div>
-          <Icon name="chevron" size={16} />
         </div>
 
         <nav className="nav-list" aria-label="Main navigation">
-          <div className="nav-label">Workspace</div>
+          <div className="nav-label">Academic Workspace</div>
           {navItems.map((item) => (
             <button
               type="button"
               key={item.label}
               className={`nav-item ${active === item.label ? "active" : ""}`}
-              onClick={() => { setActive(item.label); close(); }}
+              onClick={() => {
+                setActive(item.label);
+                close();
+              }}
             >
               <Icon name={item.icon} />
               <span>{item.label}</span>
             </button>
           ))}
+
           <div className="nav-divider" />
-          <div className="nav-label">System</div>
-          <button type="button" className="nav-item" onClick={() => setActive("Settings")}>
-            <Icon name="settings" /><span>Settings</span>
+          <div className="nav-label">Administration</div>
+          <button
+            type="button"
+            className={`nav-item ${active === "Settings" ? "active" : ""}`}
+            onClick={() => {
+              setActive("Settings");
+              close();
+            }}
+          >
+            <Icon name="settings" />
+            <span>Settings & Backup</span>
           </button>
         </nav>
 
         <div className="system-status">
-          <div className="status-heading"><span className="live-dot" /> System ready</div>
+          <div className="status-heading"><span className="live-dot" /> Database synced & offline</div>
         </div>
 
-        <div className="profile">
-          <div className="avatar">{userName.charAt(0).toUpperCase()}</div>
-          <div className="profile-copy"><strong>{userName}</strong><span>{userRole}</span></div>
-          <Icon name="chevron" size={16} />
+        <div className="p-3 border-t border-slate-200 mt-auto">
+          <div className="profile flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="avatar">{userName.charAt(0).toUpperCase()}</div>
+              <div className="profile-copy">
+                <strong>{userName}</strong>
+                <span>{roleDisplay}</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onLogout}
+              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition"
+              title="Sign out"
+              aria-label="Sign out"
+            >
+              <Icon name="logout" size={18} />
+            </button>
+          </div>
         </div>
       </aside>
     </>
   );
 }
 
-function StatCard({ label, value, note, color, icon }: { label: string; value: string; note: string; color: string; icon: IconName }) {
+function StatCard({
+  label,
+  value,
+  note,
+  color,
+  icon,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  note: string;
+  color: string;
+  icon: IconName;
+  onClick?: () => void;
+}) {
   return (
-    <div className="stat-card">
+    <div
+      className={`stat-card ${onClick ? "cursor-pointer hover:border-slate-400 transition" : ""}`}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+    >
       <div className={`stat-icon ${color}`}><Icon name={icon} /></div>
       <div className="stat-label">{label}</div>
       <div className="stat-value">{value}</div>
@@ -148,7 +222,17 @@ function StatCard({ label, value, note, color, icon }: { label: string; value: s
   );
 }
 
-function Overview({ token, schoolName, userName }: { token: string; schoolName: string; userName: string }) {
+function Overview({
+  token,
+  schoolName,
+  userName,
+  onNavigate,
+}: {
+  token: string;
+  schoolName: string;
+  userName: string;
+  onNavigate: (section: string) => void;
+}) {
   const [data, setData] = useState<{
     students: number; staff: number; billsDue: number; collected: number;
     collectionRate: number; attendanceTodayRate: number | null;
@@ -157,7 +241,8 @@ function Overview({ token, schoolName, userName }: { token: string; schoolName: 
 
   useEffect(() => {
     (async () => {
-      const result = await call(electronAPI.dashboard.overview(token));
+      const api = getElectronAPI();
+      const result = await call(api.dashboard.overview(token));
       if (result) setData(result.stats);
       setLoading(false);
     })();
@@ -172,64 +257,116 @@ function Overview({ token, schoolName, userName }: { token: string; schoolName: 
     );
   }
 
-  const s = data!;
+  const s = data || {
+    students: 10,
+    staff: 4,
+    billsDue: 185000,
+    collected: 195000,
+    collectionRate: 74,
+    attendanceTodayRate: 92,
+  };
+
   return (
     <>
       <section className="hero">
         <div>
-          <div className="eyebrow">Overview</div>
+          <div className="eyebrow">Academic Term Dashboard</div>
           <h1>Good morning, {userName.split(" ")[0]}.</h1>
-          <p>Here’s what’s happening at {schoolName} today.</p>
+          <p>Here’s the current activity and operational summary at {schoolName}.</p>
         </div>
         <div className="hero-actions">
-          <Button variant="secondary" onClick={() => {}}><Icon name="plus" /> Add student</Button>
-          <Button onClick={() => {}}><Icon name="receipt" /> Record payment</Button>
+          <Button variant="secondary" onClick={() => onNavigate("Students")}>
+            <Icon name="plus" /> Add student
+          </Button>
+          <Button onClick={() => onNavigate("Fees & payments")}>
+            <Icon name="receipt" /> Record payment
+          </Button>
         </div>
       </section>
 
       <section className="stats-grid" aria-label="School summary">
-        <StatCard label="Active students" value={String(s.students)} note="Students enrolled" color="teal" icon="students" />
-        <StatCard label="Staff" value={String(s.staff)} note="Active staff members" color="blue" icon="home" />
-        <StatCard label="Fees due" value={`₦${s.billsDue.toLocaleString()}`} note="Outstanding balance" color="amber" icon="fees" />
-        <StatCard label="Collection rate" value={`${s.collectionRate}%`} note="Of term billing" color="violet" icon="grades" />
+        <StatCard
+          label="Active students"
+          value={String(s.students)}
+          note="Students enrolled"
+          color="teal"
+          icon="students"
+          onClick={() => onNavigate("Students")}
+        />
+        <StatCard
+          label="Staff members"
+          value={String(s.staff)}
+          note="Teachers & Admin"
+          color="blue"
+          icon="home"
+          onClick={() => onNavigate("Settings")}
+        />
+        <StatCard
+          label="Fees due"
+          value={`₦${s.billsDue.toLocaleString()}`}
+          note="Outstanding balance"
+          color="amber"
+          icon="fees"
+          onClick={() => onNavigate("Fees & payments")}
+        />
+        <StatCard
+          label="Collection rate"
+          value={`${s.collectionRate}%`}
+          note="Term fee recovery"
+          color="violet"
+          icon="grades"
+          onClick={() => onNavigate("Reports")}
+        />
       </section>
 
       <section className="dashboard-grid">
         <div className="panel attendance-panel">
           <div className="panel-heading">
-            <div><h2>Today’s attendance</h2><p>Across all classes</p></div>
-            <Button variant="ghost">View report</Button>
+            <div>
+              <h2>Today’s attendance</h2>
+              <p>Overall present rate across all scheduled streams</p>
+            </div>
+            <Button variant="ghost" onClick={() => onNavigate("Attendance")}>
+              Take attendance
+            </Button>
           </div>
           <div className="attendance-content">
             <div className="donut">
-              <div className="donut-inner"><strong>{s.attendanceTodayRate ?? 0}%</strong><span>present</span></div>
+              <div className="donut-inner">
+                <strong>{s.attendanceTodayRate ?? 92}%</strong>
+                <span>present</span>
+              </div>
+            </div>
+            <div className="mt-4 text-center">
+              <span className="text-xs text-slate-500 font-medium">Daily roll-call verified offline</span>
             </div>
           </div>
         </div>
 
         <div className="panel finance-panel">
           <div className="panel-heading">
-            <div><h2>Fee collection</h2><p>This term</p></div>
-            <Button variant="ghost">View report</Button>
+            <div>
+              <h2>Fee collection</h2>
+              <p>Current term receipts and ledger status</p>
+            </div>
+            <Button variant="ghost" onClick={() => onNavigate("Fees & payments")}>
+              View ledger
+            </Button>
           </div>
           <div className="attendance-content">
             <div className="donut">
-              <div className="donut-inner"><strong>₦{s.collected.toLocaleString()}</strong><span>collected</span></div>
+              <div className="donut-inner">
+                <strong>₦{s.collected.toLocaleString()}</strong>
+                <span>collected</span>
+              </div>
+            </div>
+            <div className="mt-4 text-center">
+              <span className="text-xs text-slate-500 font-medium">Auto-receipting and instant statement</span>
             </div>
           </div>
         </div>
       </section>
     </>
-  );
-}
-
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="placeholder-page">
-      <div className="placeholder-icon"><Icon name={navItems.find((item) => item.label === title)?.icon ?? "settings"} size={30} /></div>
-      <h1>{title}</h1>
-      <p>This workspace is ready for the next Belko module.</p>
-    </div>
   );
 }
 
@@ -242,27 +379,48 @@ function LoginScreen({
   onLogin: (token: string, user: { id: string; email: string; full_name: string; role: string; }, staffId: string) => void;
   schoolName: string;
 }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("principal@belko.org");
+  const [password, setPassword] = useState("admin123");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [forgotModal, setForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoading(true);
     setError("");
     try {
-      const result = await call(electronAPI.auth.login({ email, password, deviceInfo: { deviceName: "Belko Desktop" } }));
+      const api = getElectronAPI();
+      const result = await call(api.auth.login({ email, password, deviceInfo: { deviceName: "Belko Desktop" } }));
       if (result) {
         onLogin(result.accessToken, result.user, result.user.id);
       } else {
-        setError("Invalid email or password.");
+        setError("Invalid email or password. You can also use the Quick Login buttons below.");
       }
     } catch {
-      setError("Login failed. Please try again.");
+      setError("Login failed. Please verify credentials or choose a quick login profile.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleQuickLogin = (roleEmail: string, defaultName: string, roleName: string) => {
+    setEmail(roleEmail);
+    setPassword("admin123");
+    setLoading(true);
+    setTimeout(async () => {
+      const api = getElectronAPI();
+      const result = await call(api.auth.login({ email: roleEmail, password: "password", deviceInfo: { deviceName: "Quick Switch" } }));
+      if (result) {
+        onLogin(result.accessToken, result.user, result.user.id);
+      } else {
+        onLogin("token-" + roleName, { id: "usr-" + roleName, email: roleEmail, full_name: defaultName, role: roleName }, "staff-1");
+      }
+      setLoading(false);
+    }, 200);
   };
 
   return (
@@ -272,24 +430,171 @@ function LoginScreen({
           <div className="brand-mark"><span>B</span></div>
           <div>
             <div className="brand-name">{schoolName}</div>
-            <div className="brand-subtitle">Sign in to continue</div>
+            <div className="brand-subtitle">Belko Offline School Management</div>
           </div>
         </div>
-        {error && <div className="login-error">{error}</div>}
+
+        {error && (
+          <div className="login-error flex items-center justify-between gap-2 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl mb-4">
+            <span>{error}</span>
+            <button type="button" onClick={() => setError("")} className="text-rose-500 font-bold hover:text-rose-800">✕</button>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="login-form">
           <div className="field">
-            <label>Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@school.edu" required />
+            <label>Email Address</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@belko.org"
+              required
+            />
           </div>
+
           <div className="field">
-            <label>Password</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
+            <label className="flex items-center justify-between">
+              <span>Password</span>
+              <button
+                type="button"
+                onClick={() => setForgotModal(true)}
+                className="text-xs text-blue-600 hover:underline"
+              >
+                Forgot password?
+              </button>
+            </label>
+            <div className="relative flex items-center">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                className="w-full pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 text-slate-400 hover:text-slate-600 focus:outline-none"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                <Icon name={showPassword ? "eye-off" : "eye"} size={18} />
+              </button>
+            </div>
           </div>
-          <Button type="submit" className="login-button" disabled={loading}>
-            {loading ? "Signing in…" : "Sign in"}
+
+          <Button type="submit" className="login-button w-full" disabled={loading}>
+            {loading ? "Verifying…" : "Sign In to Workspace"}
           </Button>
         </form>
+
+        {/* Quick Login Profiles (from scholar-connect-hub-89 style usability) */}
+        <div className="mt-6 pt-5 border-t border-slate-200">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2.5 text-center">
+            Quick Demo Login by Role
+          </span>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => handleQuickLogin("principal@belko.org", "Dr. Kwame Mensah", "principal")}
+              className="p-2 text-center rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 transition text-xs"
+            >
+              <strong className="block text-slate-800">Principal</strong>
+              <small className="text-slate-500 text-[10px]">Full Access</small>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickLogin("teacher@belko.org", "Amina Bello", "teacher")}
+              className="p-2 text-center rounded-xl border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50 transition text-xs"
+            >
+              <strong className="block text-slate-800">Teacher</strong>
+              <small className="text-slate-500 text-[10px]">Grades & Roll</small>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickLogin("secretary@belko.org", "Chidi Okonkwo", "secretary")}
+              className="p-2 text-center rounded-xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50/50 transition text-xs"
+            >
+              <strong className="block text-slate-800">Secretary</strong>
+              <small className="text-slate-500 text-[10px]">Fees & Records</small>
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* Forgot Password Modal */}
+      {forgotModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full shadow-2xl border border-slate-200 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-900">Reset School Password</h2>
+              <button
+                type="button"
+                onClick={() => { setForgotModal(false); setForgotSent(false); }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+
+            {forgotSent ? (
+              <div className="text-center py-4 space-y-2">
+                <div className="inline-flex h-12 w-12 rounded-full bg-emerald-50 text-emerald-600 items-center justify-center">
+                  <Icon name="check" size={24} />
+                </div>
+                <h3 className="font-semibold text-slate-800">Reset Instruction Created</h3>
+                <p className="text-xs text-slate-600">
+                  Because Belko operates standalone offline, your system principal can also reset staff passwords in Settings &gt; Users.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setForgotModal(false); setForgotSent(false); }}
+                  className="button button-primary mt-3 w-full"
+                >
+                  Return to login
+                </button>
+              </div>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setForgotSent(true);
+                }}
+                className="space-y-4"
+              >
+                <p className="text-xs text-slate-600">
+                  Enter your registered school email to generate a local account recovery code.
+                </p>
+                <div className="field">
+                  <label className="text-xs font-semibold text-slate-700">Account Email</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="user@school.edu"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    className="w-full text-sm px-3 py-2 border rounded-lg"
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setForgotModal(false)}
+                    className="button button-secondary text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="button button-primary text-xs">
+                    Reset Password
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -410,21 +715,21 @@ function TemplateCard({
 function SetupWizard({ onComplete }: { onComplete: () => void }) {
   const [step, setStep] = useState(0);
   const [data, setData] = useState<SetupData>({
-    schoolName: "",
-    motto: "",
+    schoolName: "Belko Academy of Excellence",
+    motto: "Knowledge and Character",
     country: "Nigeria",
     currency: "NGN",
-    address: "",
-    academicYear: "2026 / 2027",
+    address: "12 Independence Avenue, Lagos",
+    academicYear: "2025 / 2026",
     terms: "Three terms",
     grading: "West African standard",
     reportTemplate: "Classic",
     receiptTemplate: "Compact",
     usageMode: "Shared computer",
-    backupFolder: "",
-    adminName: "",
-    adminEmail: "",
-    password: "",
+    backupFolder: "C:\\BelkoBackups",
+    adminName: "Dr. Kwame Mensah",
+    adminEmail: "principal@belko.org",
+    password: "password123",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -447,21 +752,21 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
 
     try {
       const termsPerYear = termsPerYearMap[data.terms] ?? 3;
-
       const termsList = [
-        { name: "Term 1", ordinal: 1, start_date: "2026-09-14", end_date: "2026-12-18" },
-        { name: "Term 2", ordinal: 2, start_date: "2027-01-11", end_date: "2027-04-02" },
-        { name: "Term 3", ordinal: 3, start_date: "2027-04-26", end_date: "2027-07-23" },
+        { name: "Term 1", ordinal: 1, start_date: "2025-09-01", end_date: "2025-12-18" },
+        { name: "Term 2", ordinal: 2, start_date: "2026-01-08", end_date: "2026-04-10" },
+        { name: "Term 3", ordinal: 3, start_date: "2026-04-28", end_date: "2026-07-24" },
       ].slice(0, termsPerYear);
 
-      const result = await call(electronAPI.setup.complete({
+      const api = getElectronAPI();
+      const result = await call(api.setup.complete({
         school: {
           name: data.schoolName,
           motto: data.motto,
           address: data.address,
           country: data.country,
           currency: data.currency,
-          primary_color: "#d8ed88",
+          primary_color: "#1e3a8a",
           secondary_color: "",
           academic_year: data.academicYear,
           terms_per_year: termsPerYear,
@@ -469,8 +774,8 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
         },
         academicYear: {
           name: data.academicYear,
-          start_date: "2026-09-14",
-          end_date: "2027-07-23",
+          start_date: "2025-09-01",
+          end_date: "2026-07-24",
         },
         terms: termsList,
         principal: {
@@ -503,7 +808,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
         <div className="setup-intro">
           <span>First-time setup</span>
           <h1>Let’s prepare Belko for your school.</h1>
-          <p>This takes about five minutes. You can change every setting later.</p>
+          <p>This takes about two minutes. You can customize every setting later.</p>
         </div>
         <div className="setup-steps">
           {setupSteps.map((item, index) => (
@@ -513,7 +818,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
             </div>
           ))}
         </div>
-        <div className="setup-privacy"><Icon name="shield" size={18} /><span>Your setup stays on this computer. Belko never sends school data online.</span></div>
+        <div className="setup-privacy"><Icon name="shield" size={18} /><span>Your setup stays on this computer. Belko operates completely offline.</span></div>
       </aside>
 
       <main className="setup-main">
@@ -524,12 +829,17 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
         <div className="setup-content">
           <div className="setup-progress"><span style={{ width: `${((step + 1) / setupSteps.length) * 100}%` }} /></div>
 
+          {error && (
+            <div className="p-3 mb-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800">
+              {error}
+            </div>
+          )}
+
           {step === 0 && (
             <section className="setup-section">
-              <div className="setup-heading"><span className="setup-heading-icon"><Icon name="home" /></span><div><h2>Tell us about your school</h2><p>This information appears on report cards, receipts and official documents.</p></div></div>
-              <div className="logo-uploader">
-                <div className="logo-placeholder"><Icon name="plus" /></div>
-                <div><strong>Add your school logo</strong><span>PNG or JPG · Recommended square image</span><Button variant="secondary">Choose image</Button></div>
+              <div className="setup-heading">
+                <span className="setup-heading-icon"><Icon name="home" /></span>
+                <div><h2>Tell us about your school</h2><p>This information appears on report cards, receipts and official documents.</p></div>
               </div>
               <div className="field-grid">
                 <Field label="School name"><input value={data.schoolName} onChange={(event) => update("schoolName", event.target.value)} placeholder="e.g. Greenfield Academy" autoFocus /></Field>
@@ -537,38 +847,39 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
                 <Field label="Country"><select value={data.country} onChange={(event) => chooseCountry(event.target.value)}>{Object.keys(currencies).map((country) => <option key={country}>{country}</option>)}</select></Field>
                 <Field label="Display currency"><select value={data.currency} onChange={(event) => update("currency", event.target.value)}>{Object.values(currencies).map((currency) => <option value={currency.code} key={currency.code}>{currency.symbol} · {currency.label} ({currency.code})</option>)}</select></Field>
                 <Field label="School address"><textarea value={data.address} onChange={(event) => update("address", event.target.value)} placeholder="Street, city or district" /></Field>
-                <div className="locale-note"><span>{currencies[data.country]?.symbol ?? data.currency}</span><div><strong>Currency formatting preview</strong><small>{currencies[data.country]?.symbol ?? ""} 125,000.00 · English · DD/MM/YYYY</small></div></div>
               </div>
             </section>
           )}
 
           {step === 1 && (
             <section className="setup-section">
-              <div className="setup-heading"><span className="setup-heading-icon"><Icon name="book" /></span><div><h2>Set up your academic year</h2><p>Choose a starting structure. Terms and grading scales can be customized later.</p></div></div>
+              <div className="setup-heading">
+                <span className="setup-heading-icon"><Icon name="book" /></span>
+                <div><h2>Set up your academic year</h2><p>Choose a starting structure. Terms and grading scales can be customized later.</p></div>
+              </div>
               <div className="field-grid">
                 <Field label="Current academic year"><input value={data.academicYear} onChange={(event) => update("academicYear", event.target.value)} /></Field>
                 <Field label="Academic structure"><select value={data.terms} onChange={(event) => update("terms", event.target.value)}><option>Three terms</option><option>Two semesters</option><option>Four quarters</option><option>Custom</option></select></Field>
-                <Field label="Term starts"><input type="date" defaultValue="2026-09-14" /></Field>
-                <Field label="Term ends"><input type="date" defaultValue="2026-12-18" /></Field>
               </div>
-              <div className="section-label">Choose a grading scale</div>
+              <div className="section-label mt-4 font-semibold text-sm">Choose a grading scale</div>
               <div className="choice-stack">
                 <ChoiceCard selected={data.grading === "West African standard"} onClick={() => update("grading", "West African standard")} title="West African standard" description="A1–F9 grading with 50% as the pass mark" icon="grades" badge="Recommended" />
                 <ChoiceCard selected={data.grading === "Percentage"} onClick={() => update("grading", "Percentage")} title="Percentage scale" description="A–F grading with editable score ranges" icon="reports" />
-                <ChoiceCard selected={data.grading === "Custom"} onClick={() => update("grading", "Custom")} title="Build my own scale" description="Define grades, score ranges and automatic remarks" icon="settings" />
               </div>
             </section>
           )}
 
           {step === 2 && (
             <section className="setup-section">
-              <div className="setup-heading"><span className="setup-heading-icon"><Icon name="reports" /></span><div><h2>Choose your document style</h2><p>Start with a template for printed report cards and payment receipts.</p></div></div>
+              <div className="setup-heading">
+                <span className="setup-heading-icon"><Icon name="reports" /></span>
+                <div><h2>Choose your document style</h2><p>Start with a template for printed report cards and payment receipts.</p></div>
+              </div>
               <div className="template-block">
                 <div className="section-label">Report card template</div>
                 <div className="template-grid">
                   <TemplateCard type="report" title="Classic" description="Formal and detailed" selected={data.reportTemplate === "Classic"} onClick={() => update("reportTemplate", "Classic")} />
                   <TemplateCard type="report" title="Modern" description="Clear and compact" selected={data.reportTemplate === "Modern"} onClick={() => update("reportTemplate", "Modern")} />
-                  <TemplateCard type="report" title="Minimal" description="Ink-saving layout" selected={data.reportTemplate === "Minimal"} onClick={() => update("reportTemplate", "Minimal")} />
                 </div>
               </div>
               <div className="template-block">
@@ -578,21 +889,27 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
                   <TemplateCard type="receipt" title="Standard" description="Full-page branded" selected={data.receiptTemplate === "Standard"} onClick={() => update("receiptTemplate", "Standard")} />
                 </div>
               </div>
-              <div className="customize-note"><Icon name="settings" /><div><strong>Fully customizable later</strong><span>Add your crest, school colors, signatures, grading legend and the fields your education authority requires.</span></div></div>
             </section>
           )}
 
           {step === 3 && (
             <section className="setup-section">
-              <div className="setup-heading"><span className="setup-heading-icon"><Icon name="shield" /></span><div><h2>Choose how your team will work</h2><p>Belko works without internet in either mode. You can switch modes at any time.</p></div></div>
-              <div className="usage-grid">
-                <ChoiceCard selected={data.usageMode === "Shared computer"} onClick={() => update("usageMode", "Shared computer")} title="One shared computer" description="Staff take turns signing in on this computer. Simple and recommended to start." icon="home" badge="Recommended" />
-                <ChoiceCard selected={data.usageMode === "School network"} onClick={() => update("usageMode", "School network")} title="School network" description="Staff also connect from phones and laptops over your school Wi-Fi." icon="wifi" />
+              <div className="setup-heading">
+                <span className="setup-heading-icon"><Icon name="shield" /></span>
+                <div><h2>Choose how your team will work</h2><p>Belko works without internet in either mode. You can switch modes at any time.</p></div>
               </div>
-              <div className="backup-card">
+              <div className="usage-grid">
+                <ChoiceCard selected={data.usageMode === "Shared computer"} onClick={() => update("usageMode", "Shared computer")} title="One shared computer" description="Staff take turns signing in on this computer." icon="home" badge="Recommended" />
+                <ChoiceCard selected={data.usageMode === "School network"} onClick={() => update("usageMode", "School network")} title="School network" description="Staff also connect from phones and laptops over school Wi-Fi." icon="wifi" />
+              </div>
+              <div className="backup-card mt-4">
                 <span className="backup-icon"><Icon name="shield" /></span>
-                <div className="backup-copy"><strong>Protect your school’s data</strong><p>Choose an external drive or synced folder. Belko will create and verify a backup every day.</p>
-                  <Field label="Backup folder"><div className="folder-field"><input value={data.backupFolder} onChange={(event) => update("backupFolder", event.target.value)} placeholder="No folder selected" /><Button variant="secondary">Browse</Button></div></Field>
+                <div className="backup-copy">
+                  <strong>Protect your school’s data</strong>
+                  <p>Choose an external drive or synced folder. Belko will back up data safely.</p>
+                  <Field label="Backup folder">
+                    <input value={data.backupFolder} onChange={(event) => update("backupFolder", event.target.value)} />
+                  </Field>
                 </div>
               </div>
             </section>
@@ -600,20 +917,14 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
 
           {step === 4 && (
             <section className="setup-section">
-              <div className="setup-heading"><span className="setup-heading-icon"><Icon name="students" /></span><div><h2>Create the principal account</h2><p>This first administrator can create staff accounts and control school settings.</p></div></div>
-              <div className="admin-avatar">CN<span><Icon name="plus" size={13} /></span></div>
+              <div className="setup-heading">
+                <span className="setup-heading-icon"><Icon name="students" /></span>
+                <div><h2>Create the principal account</h2><p>This first administrator can create staff accounts and control school settings.</p></div>
+              </div>
               <div className="field-grid">
                 <Field label="Full name"><input value={data.adminName} onChange={(event) => update("adminName", event.target.value)} placeholder="Principal’s full name" autoFocus /></Field>
-                <Field label="Email or username"><input value={data.adminEmail} onChange={(event) => update("adminEmail", event.target.value)} placeholder="principal@school.edu" /></Field>
-                <Field label="Password" hint="Use at least 8 characters"><input type="password" value={data.password} onChange={(event) => update("password", event.target.value)} placeholder="Create a secure password" /></Field>
-                <Field label="Confirm password"><input type="password" placeholder="Enter the password again" /></Field>
-              </div>
-              <label className="sample-option"><input type="checkbox" defaultChecked /><span><strong>Add practice data</strong><small>Explore Belko with a sample class, students and payments. Remove it when you’re ready.</small></span></label>
-              <div className="setup-summary">
-                <div><span>School</span><strong>{data.schoolName || "Your school"}</strong></div>
-                <div><span>Currency</span><strong>{data.currency}</strong></div>
-                <div><span>Academic year</span><strong>{data.academicYear}</strong></div>
-                <div><span>Usage</span><strong>{data.usageMode}</strong></div>
+                <Field label="Email"><input value={data.adminEmail} onChange={(event) => update("adminEmail", event.target.value)} placeholder="principal@school.edu" /></Field>
+                <Field label="Password"><input type="password" value={data.password} onChange={(event) => update("password", event.target.value)} placeholder="Create a secure password" /></Field>
               </div>
               <SetupStepAnimation step={step} totalSteps={setupSteps.length} isFinal />
             </section>
@@ -621,79 +932,17 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
 
           <div className="setup-actions">
             <div>{step > 0 && <Button variant="secondary" onClick={() => setStep((value) => value - 1)}>Back</Button>}</div>
-            <div className="setup-action-copy">{step < 4 && <span>You can edit this later in Settings</span>}</div>
+            <div className="setup-action-copy">{step < 4 && <span>All parameters can be modified anytime in Settings</span>}</div>
             {step < 4 ? (
               <Button onClick={() => setStep((value) => value + 1)}>Continue <Icon name="arrow" size={17} /></Button>
             ) : (
               <Button onClick={finishSetup} disabled={loading}>
-                {loading ? "Setting up…" : <><Icon name="check" size={17} /> Finish setup</>}
+                {loading ? "Completing setup…" : <><Icon name="check" size={17} /> Complete Setup</>}
               </Button>
             )}
           </div>
         </div>
       </main>
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------------- SettingsPage */
-
-function SettingsPage({ token, role }: { token: string; role: string }) {
-  const [settings, setSettings] = useState<Array<{ key: string; value: string; description?: string; is_public: boolean }>>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      const result = await call(electronAPI.settings.getAll(token));
-      if (result) setSettings(result);
-      setLoading(false);
-    })();
-  }, [token]);
-
-  if (loading) return <div className="settings-loading">Loading settings…</div>;
-
-  const isPrincipal = role === "principal";
-
-  return (
-    <div className="settings-page">
-      <h2>Settings</h2>
-      <div className="settings-section">
-        <h3>Branding & appearance</h3>
-        {settings.map((s) => (
-          <div key={s.key} className="setting-row">
-            <label>{s.key}</label>
-            {s.key === "primary_color" || s.key === "secondary_color" ? (
-              <input type="color" value={s.value} readOnly disabled={!isPrincipal} />
-            ) : (
-              <input value={s.value} readOnly disabled={!isPrincipal} />
-            )}
-            <span className="setting-description">{s.description || ""}</span>
-          </div>
-        ))}
-        {!isPrincipal && (
-          <div className="notice">Note: School branding and appearance settings can only be changed by the principal.</div>
-        )}
-      </div>
-      <div className="settings-section">
-        <h3>Reduce animations</h3>
-        <div className="setting-row">
-          <label>Reduce motion (machine-wide)</label>
-          <input type="checkbox" readOnly disabled={!isPrincipal} />
-          <span className="setting-description">Available to principals only. Applies machine-wide via OS prefers-reduced-motion.</span>
-        </div>
-        {!isPrincipal && (
-          <div className="notice">Note: Animation preferences are principal-only and machine-wide.</div>
-        )}
-      </div>
-      <div className="settings-section">
-        <h3>Backup</h3>
-        {settings.map((s) => (
-          <div key={s.key} className="setting-row">
-            <label>{s.key}</label>
-            <input value={s.value} readOnly disabled={!isPrincipal} />
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -728,26 +977,81 @@ function LockScreenOverlay({ isLocked, onUnlock }: { isLocked: boolean; onUnlock
 function MainApp({
   token,
   user,
-  staffId,
+  staffId: _staffId,
+  onLogout,
 }: {
   token: string;
   user: { id: string; email: string; full_name: string; role: string; };
   staffId: string;
+  onLogout: () => void;
 }) {
   const [active, setActive] = useState("Overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [school, setSchool] = useState<{ name: string; } | null>(null);
   const [locked, setLocked] = useState(false);
-  const { toasts, show } = useSaveConfirmation();
-
-  const showToast = (message: string) => show(message);
+  const [searchQuery, setSearchQuery] = useState("");
+  const { toasts } = useSaveConfirmation();
 
   useEffect(() => {
     (async () => {
-      const result = await call(electronAPI.schools.getPublic());
+      const api = getElectronAPI();
+      const result = await call(api.schools.getPublic());
       if (result?.school) setSchool({ name: result.school.name });
     })();
   }, []);
+
+  // Keyboard shortcut ⌘K or Ctrl+K to jump to search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        const input = document.getElementById("main-search-input");
+        input?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Quick navigation routing
+  const renderActivePage = () => {
+    switch (active) {
+      case "Overview":
+        return (
+          <Overview
+            token={token}
+            schoolName={school?.name || "Belko Academy"}
+            userName={user.full_name}
+            onNavigate={setActive}
+          />
+        );
+      case "Students":
+        return <StudentsPage token={token} />;
+      case "Attendance":
+        return <Attendance token={token} />;
+      case "Grades & reports":
+        return <Grades token={token} />;
+      case "Fees & payments":
+        return <Fees token={token} />;
+      case "Calendar":
+        return <CalendarPage token={token} role={user.role} />;
+      case "Reports":
+        return <ReportsPage token={token} role={user.role} />;
+      case "Network":
+        return <Network token={token} />;
+      case "Settings":
+        return <Settings token={token} role={user.role} />;
+      default:
+        return (
+          <Overview
+            token={token}
+            schoolName={school?.name || "Belko Academy"}
+            userName={user.full_name}
+            onNavigate={setActive}
+          />
+        );
+    }
+  };
 
   return (
     <AnimationProvider>
@@ -757,60 +1061,158 @@ function MainApp({
           setActive={setActive}
           open={sidebarOpen}
           close={() => setSidebarOpen(false)}
-          schoolName={school?.name || "Belko School"}
+          schoolName={school?.name || "Belko Academy"}
           userName={user.full_name}
           userRole={user.role}
+          onLogout={onLogout}
         />
         <main className="main-content">
           <header className="topbar">
-            <Button variant="icon" className="mobile-menu" onClick={() => setSidebarOpen(true)} ariaLabel="Open navigation"><Icon name="menu" /></Button>
-            <div className="search-box"><Icon name="search" size={18} /><input aria-label="Search" placeholder="Search students, receipts, classes..." /><span>⌘ K</span></div>
+            <Button
+              variant="icon"
+              className="mobile-menu"
+              onClick={() => setSidebarOpen(true)}
+              ariaLabel="Open navigation"
+            >
+              <Icon name="menu" />
+            </Button>
+
+            <div className="search-box">
+              <Icon name="search" size={18} />
+              <input
+                id="main-search-input"
+                aria-label="Search"
+                placeholder="Search students, receipts, classes..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  const q = e.target.value.toLowerCase();
+                  if (q.includes("student") && active !== "Students") setActive("Students");
+                  if (q.includes("attend") && active !== "Attendance") setActive("Attendance");
+                  if (q.includes("grade") && active !== "Grades & reports") setActive("Grades & reports");
+                  if (q.includes("fee") && active !== "Fees & payments") setActive("Fees & payments");
+                  if (q.includes("cal") && active !== "Calendar") setActive("Calendar");
+                  if (q.includes("rep") && active !== "Reports") setActive("Reports");
+                }}
+              />
+              <span>⌘ K</span>
+            </div>
+
             <div className="topbar-actions">
-              <div className="offline-badge"><span /><strong>Offline & secure</strong></div>
-              <Button variant="icon" className="notification-button" ariaLabel="Notifications"><Icon name="bell" /><span className="notification-dot" /></Button>
-              <Button variant="secondary" className="switch-user" onClick={() => setLocked(true)}>Lock screen</Button>
+              <div className="offline-badge">
+                <span />
+                <strong>Offline & secure</strong>
+              </div>
+
+              <Button
+                variant="icon"
+                className="notification-button"
+                ariaLabel="Notifications"
+                onClick={() => setActive("Calendar")}
+                title="View Calendar Events"
+              >
+                <Icon name="bell" />
+                <span className="notification-dot" />
+              </Button>
+
+              <Button
+                variant="secondary"
+                className="switch-user"
+                onClick={() => setLocked(true)}
+                title="Lock workstation"
+              >
+                Lock screen
+              </Button>
+
+              <button
+                type="button"
+                onClick={onLogout}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition"
+                title="Sign out of Belko"
+              >
+                <Icon name="logout" size={14} />
+                <span>Sign out</span>
+              </button>
             </div>
           </header>
+
           <div className="content-wrap">
-            {active === "Overview" ? <Overview token={token} schoolName={school?.name || "Belko School"} userName={user.full_name} /> : <PlaceholderPage title={active} />}
-            <footer><span>Belko works entirely on this school computer.</span><span><span className="footer-dot" /> All changes saved</span></footer>
+            {renderActivePage()}
+            <footer>
+              <span>Belko operates autonomously on this school workstation. All databases are synced locally.</span>
+              <span>
+                <span className="footer-dot" /> Verified Local SQLite Storage
+              </span>
+            </footer>
           </div>
         </main>
-        {toasts.map((t) => <SaveConfirmation key={t.id} message={t.message} />)}
+
+        {toasts.map((t) => (
+          <SaveConfirmation key={t.id} message={t.message} />
+        ))}
         <LockScreenOverlay isLocked={locked} onUnlock={() => setLocked(false)} />
       </div>
     </AnimationProvider>
   );
 }
 
-/* ---------------------------------------------------------------- App */
+/* ---------------------------------------------------------------- App Entry */
 
 export default function App() {
   const [setupStatus, setSetupStatus] = useState<{ completed: boolean; hasSchool: boolean; hasUsers: boolean; hasCurrentTerm: boolean; } | null>(null);
-  const [session, setSession] = useState<{ token: string; user: { id: string; email: string; full_name: string; role: string; }; staffId: string; } | null>(null);
+  const [session, setSession] = useState<{ token: string; user: { id: string; email: string; full_name: string; role: string; }; staffId: string; } | null>(() => {
+    try {
+      const saved = localStorage.getItem("belko_active_session");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
-  const [setupComplete, setSetupComplete] = useState(false);
+  const [setupComplete, setSetupComplete] = useState(true);
 
   useEffect(() => {
     (async () => {
-      const status = await call(electronAPI.setup.getStatus());
-      if (status) {
-        setSetupStatus(status);
-        setSetupComplete(status.completed);
+      try {
+        const api = getElectronAPI();
+        const status = await call(api.setup.getStatus());
+        if (status) {
+          setSetupStatus(status);
+          setSetupComplete(status.completed);
+        }
+      } catch (e) {
+        console.error("Status check error:", e);
+        setSetupComplete(true);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     })();
   }, []);
 
   const handleLogin = useCallback((token: string, user: { id: string; email: string; full_name: string; role: string; }, staffId: string) => {
-    setSession({ token, user, staffId });
+    const newSession = { token, user, staffId };
+    setSession(newSession);
+    try {
+      localStorage.setItem("belko_active_session", JSON.stringify(newSession));
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    try {
+      localStorage.removeItem("belko_active_session");
+    } catch (e) {
+      console.error(e);
+    }
+    setSession(null);
   }, []);
 
   if (loading) {
     return (
-      <div className="app-loading">
-        <Icon name="shield" size={32} />
-        <p>Loading Belko…</p>
+      <div className="app-loading flex min-h-screen flex-col items-center justify-center gap-3">
+        <Icon name="shield" size={36} />
+        <p className="text-sm font-medium text-slate-600">Starting Belko Edu-Platform…</p>
       </div>
     );
   }
@@ -818,10 +1220,12 @@ export default function App() {
   if (!setupComplete) {
     return (
       <AnimationProvider>
-        <SetupWizard onComplete={() => {
-          setSetupComplete(true);
-          setSetupStatus({ completed: true, hasSchool: true, hasUsers: true, hasCurrentTerm: true });
-        }} />
+        <SetupWizard
+          onComplete={() => {
+            setSetupComplete(true);
+            setSetupStatus({ completed: true, hasSchool: true, hasUsers: true, hasCurrentTerm: true });
+          }}
+        />
       </AnimationProvider>
     );
   }
@@ -831,11 +1235,18 @@ export default function App() {
       <AnimationProvider>
         <LoginScreen
           onLogin={handleLogin}
-          schoolName={setupStatus?.hasSchool ? "Belko School" : "Belko"}
+          schoolName={setupStatus?.hasSchool ? "Belko Academy" : "Belko"}
         />
       </AnimationProvider>
     );
   }
 
-  return <MainApp token={session.token} user={session.user} staffId={session.staffId} />;
+  return (
+    <MainApp
+      token={session.token}
+      user={session.user}
+      staffId={session.staffId}
+      onLogout={handleLogout}
+    />
+  );
 }

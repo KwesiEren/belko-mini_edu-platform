@@ -5,10 +5,11 @@ import '@fontsource/montserrat/latin-500.css'
 import '@fontsource/montserrat/latin-600.css'
 import '@fontsource/montserrat/latin-700.css'
 import '@fontsource/montserrat/latin-800.css'
+import './api/web-bridge'
 import App from './App'
 import './index.css'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { initializeAccessibility, onReduceMotionChange } from './utils/accessibility'
-import { useReducedMotion } from './hooks/useReducedMotion'
 
 initializeAccessibility();
 
@@ -17,9 +18,6 @@ onReduceMotionChange((enabled) => {
 });
 
 function mountApp() {
-  // Keep the renderer recoverable if a packaged or cached index.html is missing
-  // the mount node. This is especially important for Electron's file:// startup,
-  // where there is no server response to replace a malformed document.
   let rootElement = document.getElementById('root');
   if (!rootElement) {
     rootElement = document.createElement('div');
@@ -30,7 +28,9 @@ function mountApp() {
 
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
-      <App />
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
     </React.StrictMode>,
   );
 }
